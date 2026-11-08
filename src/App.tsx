@@ -1,3 +1,12 @@
+import {
+  initializeCloud,
+  syncCloud,
+  flushCloud,
+  setCloudActive,
+  cloudState,
+} from "./game/cloud";
+import { Account } from "./ui/Account";
+import { DEFAULT_CONTROLS, editing } from "./game/controls";
 import { Companies } from "./ui/Companies";
 import { useEffect, useState, Component, type ReactNode } from "react";
 import {
@@ -70,6 +79,9 @@ function sound() {
   }
 }
 export default function App() {
+  const [ready,setReady]=useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState("Local saving");
   const [screen, setScreen] = useState<"menu" | "create" | "game">("menu");
   const [companies, setCompanies] = useState(false);
   const [available, setAvailable] = useState(false),
@@ -89,9 +101,10 @@ export default function App() {
     open = useGame((s) => s.open);
   useEffect(() => {
     useGame.getState().setGame(newGame());
-    loadGame("autosave")
+    initializeCloud()
+      .then(() => loadGame("autosave"))
       .then((s) => setAvailable(!!s))
-      .catch((e) => useGame.getState().notify(e.message));
+      .catch((e) => useGame.getState().notify(e.message)).finally(()=>setReady(true));
     try {
       const s = localStorage.getItem("streetwear-settings");
       if (s) {
@@ -101,7 +114,13 @@ export default function App() {
           Number.isFinite(p.volume) &&
           Number.isFinite(p.sensitivity)
         )
-          useGame.getState().configure(p);
+          useGame
+            .getState()
+            .configure({
+              ...DEFAULT_CONTROLS,
+              ...p,
+              keys: { ...DEFAULT_CONTROLS.keys, ...p.keys },
+            });
       }
     } catch {
       useGame.getState().notify("Settings could not be restored.");
@@ -140,21 +159,20 @@ export default function App() {
   }, [notice]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (
-        screen !== "game" ||
-        (e.target as HTMLElement).closest("input,textarea,select")
-      )
-        return;
+      if (screen !== "game" || editing(e.target)) return;
       const s = useGame.getState();
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (s.panel && e.code !== "Escape") return;
       if (e.code === "Escape") s.open(s.panel ? null : "settings");
-      if (e.code === "Tab") {
+      if (e.code === s.settings.keys.phone) {
         e.preventDefault();
         s.open(s.panel === "social" ? null : "social");
       }
-      if (e.code === "KeyI")
+      if (e.code === s.settings.keys.inventory)
         s.open(s.panel === "inventory" ? null : "inventory");
-      if (e.code === "KeyB") s.open(s.panel === "upgrades" ? null : "upgrades");
-      if (e.code === "KeyM") setGuide((x) => !x);
+      if (e.code === s.settings.keys.workspace)
+        s.open(s.panel === "upgrades" ? null : "upgrades");
+      if (e.code === s.settings.keys.map) setGuide((x) => !x);
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -162,10 +180,36 @@ export default function App() {
   const saveAndExit = async () => {
     useGame.setState({ paused: true });
     if (!(await useGame.getState().save())) return;
+    await flushCloud();
     setAvailable(true);
     open(null);
     setScreen("menu");
   };
+  useEffect(() => {
+    const change = () => {
+      setCloudStatus(cloudState.status);
+      if (
+        cloudState.conflicts.includes(useGame.getState().game?.companyId || "")
+      ) {
+        useGame.setState({ paused: true });
+      }
+    };
+    const online = () => {
+      void initializeCloud();
+    };
+    window.addEventListener("company-cloud-change", change);
+    window.addEventListener("online", online);
+    const timer = setInterval(() => void syncCloud(), 20000);
+    return () => {
+      window.removeEventListener("company-cloud-change", change);
+      window.removeEventListener("online", online);
+      clearInterval(timer);
+    };
+  }, []);
+  useEffect(() => {
+    setCloudActive(screen === "game" ? g?.companyId || null : null);
+    return () => setCloudActive(null);
+  }, [screen, g?.companyId]);
   const resume = async () => {
     try {
       const s = await loadGame("autosave");
@@ -223,15 +267,19 @@ export default function App() {
             </p>
             <button
               className="primary menu-start"
+              disabled={!ready}
               onClick={() => setScreen("create")}
             >
               Start your story <ArrowUpRight size={20} />
             </button>
             <div className="menu-links">
-              <button disabled={!available} onClick={resume}>
+              <button disabled={!available||!ready} onClick={resume}>
                 Continue <ArrowRight size={14} />
               </button>
-              <button onClick={() => setCompanies(true)}>My Companies</button>
+              <button disabled={!ready} onClick={() => setCompanies(true)}>My Companies</button>
+              <button disabled={!ready} onClick={() => setAccountOpen(true)}>
+                Email login & cloud saves
+              </button>
               <button
                 onClick={async () => {
                   try {
@@ -526,7 +574,7 @@ export default function App() {
           <footer className="statusbar">
             <span>
               <i className="live-dot" />
-              {status}
+              {status} · {cloudStatus}
             </span>
             <span>WASD move · Drag to orbit · E interact · Tab phone</span>
             <button
@@ -541,12 +589,20 @@ export default function App() {
           {panel && (
             <aside
               className="workstation"
-              aria-label={PANEL_TITLES[panel]?.[1]}
+              aria-label={
+                panel === "account"
+                  ? "Account & cloud saves"
+                  : PANEL_TITLES[panel]?.[1]
+              }
             >
               <header>
                 <div>
                   <span className="eyebrow">{PANEL_TITLES[panel]?.[0]}</span>
-                  <h2>{PANEL_TITLES[panel]?.[1]}</h2>
+                  <h2>
+                    {panel === "account"
+                      ? "Account & cloud saves"
+                      : PANEL_TITLES[panel]?.[1]}
+                  </h2>
                 </div>
                 <button
                   className="icon-button"
@@ -558,7 +614,11 @@ export default function App() {
               </header>
               <div className="panel-body">
                 <Boundary>
-                  <PanelContent key={panel} panel={panel} />
+                  {panel === "account" ? (
+                    <Account />
+                  ) : (
+                    <PanelContent key={panel} panel={panel} />
+                  )}
                   {panel === "settings" && (
                     <button className="primary full" onClick={saveAndExit}>
                       Save & return to menu
@@ -631,6 +691,21 @@ export default function App() {
               </>
             )}
           </div>
+        </div>
+      )}
+      {accountOpen && (
+        <div className="modal-shade">
+          <section className="creation">
+            <button
+              className="close"
+              aria-label="Close account"
+              onClick={() => setAccountOpen(false)}
+            >
+              ×
+            </button>
+            <h2>Account & cloud saves</h2>
+            <Account />
+          </section>
         </div>
       )}
       {companies && (

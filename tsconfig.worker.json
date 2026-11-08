@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
+  },
+  "include": [
+    "worker/index.ts",
+    "src/game/schema.ts",
+    "src/game/simulation.ts",
+    "src/game/catalog.ts",
+    "functions/**/*.ts"
+  ]
+}

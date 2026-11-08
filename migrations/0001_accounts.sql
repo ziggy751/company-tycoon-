@@ -1,0 +1,10 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS challenges(id TEXT PRIMARY KEY, email TEXT NOT NULL, digest TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, used INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS challenge_expiry ON challenges(expires_at);
+CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions(digest TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS session_expiry ON sessions(expires_at);
+CREATE TABLE IF NOT EXISTS companies(user_id TEXT NOT NULL REFERENCES users(id), id TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT, updated_at INTEGER NOT NULL, last_mutation TEXT NOT NULL, PRIMARY KEY(user_id,id));
+CREATE TABLE IF NOT EXISTS company_history(user_id TEXT NOT NULL, company_id TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT, updated_at INTEGER NOT NULL, PRIMARY KEY(user_id,company_id,revision));
+CREATE TABLE IF NOT EXISTS receipts(user_id TEXT NOT NULL, company_id TEXT NOT NULL, mutation_id TEXT NOT NULL, revision INTEGER NOT NULL, PRIMARY KEY(user_id,company_id,mutation_id));

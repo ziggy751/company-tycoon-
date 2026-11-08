@@ -1,7 +1,12 @@
+import {
+  DEFAULT_CONTROLS,
+  normalizeControls,
+  type ControlSettings,
+} from "./controls";
 import { create } from "zustand";
 import { act, tick, type Action, type Game } from "./simulation";
 import { saveGame } from "./save";
-type Settings = {
+type Settings = ControlSettings & {
   quality: "low" | "high";
   sensitivity: number;
   volume: number;
@@ -33,6 +38,7 @@ export const useGame = create<Store>((set, get) => ({
   notice: "",
   saveStatus: "Not saved yet",
   settings: {
+    ...DEFAULT_CONTROLS,
     quality: "high",
     sensitivity: 1,
     volume: 0.15,
@@ -47,7 +53,10 @@ export const useGame = create<Store>((set, get) => ({
     }),
   open: (panel) => set({ panel }),
   notify: (notice) => set({ notice }),
-  configure: (s) => set({ settings: { ...get().settings, ...s } }),
+  configure: (s) => {
+    const next = { ...get().settings, ...s };
+    set({ settings: { ...next, ...normalizeControls(next) } });
+  },
   dispatch: (a) => {
     try {
       const g = get().game;
@@ -62,7 +71,13 @@ export const useGame = create<Store>((set, get) => ({
   },
   step: () => {
     const { game, paused, speed, panel } = get();
-    if (game && !paused && panel !== "settings" && panel !== "saves") {
+    if (
+      game &&
+      !paused &&
+      panel !== "settings" &&
+      panel !== "saves" &&
+      panel !== "account"
+    ) {
       set({ game: tick(game, speed) });
       if (get().game!.time % 10 === 0) void get().save();
     }

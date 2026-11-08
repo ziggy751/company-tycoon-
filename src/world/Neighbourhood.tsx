@@ -15,7 +15,13 @@ function Block({
   onClick?: () => void;
 }) {
   return (
-    <mesh position={p} castShadow receiveShadow onClick={onClick}>
+    <mesh
+      position={p}
+      castShadow
+      receiveShadow
+      userData={{ cameraSolid: true }}
+      onClick={onClick}
+    >
       <boxGeometry args={s} />
       <meshStandardMaterial
         color={c}

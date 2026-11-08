@@ -1,3 +1,5 @@
+import { editing } from "../game/controls";
+import { CameraCollision } from "./CameraCollision";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
@@ -34,6 +36,7 @@ function Box({
       smoothness={2}
       castShadow
       receiveShadow
+      userData={{ cameraSolid: true }}
       {...props}
     >
       <meshStandardMaterial
@@ -124,11 +127,53 @@ function Founder() {
   const legs = useRef<THREE.Group>(null);
   const keys = useRef(new Set<string>());
   const walk = useRef(0);
-  const { camera, controls } = useThree();
+  const settings = useGame((s) => s.settings);
+  const { camera, controls, gl } = useThree();
+  const look = useRef({ yaw: 0, pitch: 0 });
+  useEffect(() => {
+    if (!settings.firstPerson) return;
+    const canvas = gl.domElement;
+    let point: { x: number; y: number; id: number } | null = null;
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0 && e.button !== 2) return;
+      point = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      canvas.setPointerCapture(e.pointerId);
+    };
+    const move = (e: PointerEvent) => {
+      if (!point) return;
+      const sensitivity = useGame.getState().settings.sensitivity * 0.004;
+      look.current.yaw -= (e.clientX - point.x) * sensitivity;
+      look.current.pitch = THREE.MathUtils.clamp(
+        look.current.pitch -
+          (e.clientY - point.y) *
+            sensitivity *
+            (useGame.getState().settings.invert ? -1 : 1),
+        -1.35,
+        1.35,
+      );
+      point.x = e.clientX;
+      point.y = e.clientY;
+    };
+    const up = () => {
+      point = null;
+    };
+    canvas.addEventListener("pointerdown", down);
+    canvas.addEventListener("pointermove", move);
+    canvas.addEventListener("pointerup", up);
+    canvas.addEventListener("pointercancel", up);
+    window.addEventListener("blur", up);
+    return () => {
+      canvas.removeEventListener("pointerdown", down);
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerup", up);
+      canvas.removeEventListener("pointercancel", up);
+      window.removeEventListener("blur", up);
+    };
+  }, [gl, settings.firstPerson]);
   const outfit = useGame((s) =>
     s.game!.designs.find((d) => d.id === s.game!.equipped),
   );
-  const settings = useGame((s) => s.settings);
+
   const position = useRef(
     new THREE.Vector3(
       ...([
@@ -146,15 +191,18 @@ function Founder() {
   }, [camera, controls]);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (editing(e.target) || useGame.getState().panel) return;
       if (
-        (e.target as HTMLElement).closest("input,textarea,select") ||
-        useGame.getState().panel
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        (e.repeat && e.code === useGame.getState().settings.keys.interact)
       )
         return;
       keys.current.add(e.code);
       if (["Space", "ArrowUp", "ArrowDown"].includes(e.code))
         e.preventDefault();
-      if (e.code === "KeyE") {
+      if (e.code === useGame.getState().settings.keys.interact) {
         const p = position.current;
         const stations: [number, number, string][] = [
           [-1.6, -2, "design"],
@@ -190,14 +238,27 @@ function Founder() {
     const k = keys.current;
     const st = useGame.getState();
     const canMove = !st.panel && !st.paused;
-    let dx = canMove ? Number(k.has("KeyD")) - Number(k.has("KeyA")) : 0;
-    let dz = canMove ? Number(k.has("KeyS")) - Number(k.has("KeyW")) : 0;
+    let dx = canMove
+      ? Number(k.has(settings.keys.right)) - Number(k.has(settings.keys.left))
+      : 0;
+    let dz = canMove
+      ? Number(k.has(settings.keys.back)) - Number(k.has(settings.keys.forward))
+      : 0;
     const moving = !!(dx || dz);
     if (moving) {
       const n = Math.hypot(dx, dz);
-      const speed = (k.has("ShiftLeft") ? 3.6 : 2.1) * Math.min(delta, 1);
+      const speed =
+        (k.has(settings.keys.sprint) ? 3.6 : 2.1) *
+        settings.movementSensitivity *
+        Math.min(delta, 1);
       dx = (dx / n) * speed;
       dz = (dz / n) * speed;
+      if (settings.firstPerson) {
+        const x = dx,
+          z = dz;
+        dx = x * Math.cos(look.current.yaw) - z * Math.sin(look.current.yaw);
+        dz = x * Math.sin(look.current.yaw) + z * Math.cos(look.current.yaw);
+      }
       const p = position.current;
       const previous = p.clone();
       const next = movePlayer([p.x, p.z], dx, dz, !!st.game?.doorOpen);
@@ -214,7 +275,7 @@ function Founder() {
       if (st.game) st.game.player = [p.x, p.z];
     }
     const jump =
-      canMove && k.has("Space")
+      canMove && k.has(settings.keys.jump)
         ? Math.abs(Math.sin(walk.current + performance.now() / 250)) * 0.28
         : 0;
     ref.current.position.copy(position.current);
@@ -234,8 +295,24 @@ function Founder() {
         position.current.clone().add(new THREE.Vector3(0, 1.55, 0.1)),
         0.2,
       );
-      camera.lookAt(
-        position.current.clone().add(new THREE.Vector3(0, 1.5, -3)),
+      const eye = position.current.clone().add(new THREE.Vector3(0, 1.55, 0.1));
+      const target = eye
+        .clone()
+        .add(
+          new THREE.Vector3(
+            Math.sin(look.current.yaw) * Math.cos(look.current.pitch),
+            Math.sin(look.current.pitch),
+            -Math.cos(look.current.yaw) * Math.cos(look.current.pitch),
+          ),
+        );
+      const matrix = new THREE.Matrix4().lookAt(
+        camera.position,
+        target,
+        new THREE.Vector3(0, 1, 0),
+      );
+      camera.quaternion.slerp(
+        new THREE.Quaternion().setFromRotationMatrix(matrix),
+        1 - Math.exp(-15 * delta),
       );
     }
   });
@@ -580,19 +657,24 @@ export function World() {
             <OrbitControls
               makeDefault
               target={[0, 0.6, 0]}
-              minDistance={7}
-              maxDistance={22}
+              minDistance={0.4}
+              maxDistance={28}
               maxPolarAngle={Math.PI / 2.15}
               minPolarAngle={0.25}
               enablePan={false}
+              enableDamping
+              dampingFactor={settings.damping}
+              zoomSpeed={settings.zoomSensitivity}
+              onStart={() => useGame.getState().notify("")}
               rotateSpeed={settings.sensitivity * (settings.invert ? -1 : 1)}
               mouseButtons={{
                 LEFT: THREE.MOUSE.ROTATE,
-                MIDDLE: THREE.MOUSE.DOLLY,
+                MIDDLE: undefined as unknown as THREE.MOUSE,
                 RIGHT: THREE.MOUSE.ROTATE,
               }}
             />
           )}
+          {!settings.firstPerson && <CameraCollision />}
         </Canvas>
       )}
     </div>

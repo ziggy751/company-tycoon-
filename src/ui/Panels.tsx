@@ -1,3 +1,4 @@
+import { Controls } from "./Controls";
 import { Wardrobe } from "./Wardrobe";
 import { useState, useEffect, Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
@@ -735,7 +736,14 @@ export function SettingsPanel() {
       >
         Open wardrobe & home controls
       </button>
-      <h3>KEYBOARD</h3>
+      <Controls />
+      <button
+        className="secondary full"
+        onClick={() => useGame.getState().open("account")}
+      >
+        Email login & cloud saves
+      </button>
+      <h3>KEYBOARD DEFAULTS</h3>
       <div className="controls-list">
         W A S D <span>Move</span>
         <br />
