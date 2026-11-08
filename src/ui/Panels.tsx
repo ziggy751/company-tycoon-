@@ -1,3 +1,16 @@
+import {
+  industryOf,
+  industryUpgrades,
+  TUTORIAL_TASKS,
+} from "../game/industries";
+import {
+  IndustryDesigner,
+  IndustryProduction,
+  IndustryInventory,
+} from "./IndustryPanels";
+import { WorldMap } from "./WorldMap";
+import { garageReady } from "../game/simulation";
+import { Controls } from "./Controls";
 import { Wardrobe } from "./Wardrobe";
 import { useState, useEffect, Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
@@ -27,8 +40,9 @@ import {
   occupied,
   type Design,
 } from "../game/simulation";
-import { loadGame, listSaves, validateSave } from "../game/save";
+import { loadGame, listSaves, validateSave, saveGame } from "../game/save";
 export const PANEL_TITLES: Record<string, [string, string]> = {
+  map: ["YOUR NEIGHBOURHOOD", "World map"],
   wardrobe: ["YOUR OWN LABEL", "Wardrobe & home"],
   design: ["01 / CREATIVE", "Design studio"],
   production: ["02 / MAKE", "Production"],
@@ -286,7 +300,11 @@ export function ProductionPanel() {
 export function SocialPanel() {
   const g = useGame((s) => s.game)!;
   const [caption, setCaption] = useState(
-    "Our first release. Made in a bedroom, worn everywhere. #independent",
+    industryOf(g).id === "mtb"
+      ? "Our first trail accessory release. Designed, prototyped and inspected. #rideindependent"
+      : industryOf(g).id === "haircare"
+        ? "Everyday styling essentials, sourced with care. #independent"
+        : "Our first release. Made in a bedroom, worn everywhere. #independent",
   );
   const cooldown = Math.max(0, E.postCooldown - g.time + g.lastPost);
   return (
@@ -581,7 +599,7 @@ export function UpgradePanel() {
         <p>Choose improvements that do more than look good.</p>
       </div>
       <h3>WORKSPACE IMPROVEMENTS</h3>
-      {UPGRADES.map((u) => {
+      {industryUpgrades(industryOf(g).id).map((u) => {
         const owned = g.upgrades.includes(u.id),
           locked = completed(g) < u.orders;
         return (
@@ -612,6 +630,28 @@ export function UpgradePanel() {
           </article>
         );
       })}
+      <h3>EXPAND INTO A GARAGE</h3>
+      <p className="muted">
+        Requires {money(industryOf(g).garageRevenue)} revenue,{" "}
+        {industryOf(g).garageOrders} delivered orders, $500 net cash profit,
+        reputation 15, and shelving. Your garage provides a separate physical
+        workspace, 60 inventory slots, and batches of six for sourced products.
+      </p>
+      <button
+        className="primary full"
+        disabled={
+          g.property === "garage" ||
+          !garageReady(g) ||
+          g.cash < industryOf(g).garageCost
+        }
+        onClick={() =>
+          useGame.getState().dispatch({ type: "upgrade", id: "garage" })
+        }
+      >
+        {g.property === "garage"
+          ? "Garage owned"
+          : "Purchase garage · " + money(industryOf(g).garageCost)}
+      </button>
       <h3>MAKE IT YOURS</h3>
       <label className="row">
         Studio wall colour
@@ -735,7 +775,22 @@ export function SettingsPanel() {
       >
         Open wardrobe & home controls
       </button>
-      <h3>KEYBOARD</h3>
+      <Controls />
+      <h3>OPTIONAL INDUSTRY TUTORIAL</h3>
+      <p className="muted">
+        {g.onboarding?.tasks.length || 0}/{TUTORIAL_TASKS.length} tasks
+        completed.{" "}
+        {g.onboarding?.rewarded
+          ? "The $100 reward has already been paid. Replaying never pays it again."
+          : "Complete the tutorial for a one-time $100 grant."}
+      </p>
+      <button
+        className="secondary full"
+        onClick={() => useGame.getState().dispatch({ type: "tutorial-start" })}
+      >
+        Start / resume tutorial
+      </button>
+      <h3>KEYBOARD DEFAULTS</h3>
       <div className="controls-list">
         W A S D <span>Move</span>
         <br />
@@ -828,7 +883,7 @@ export function SavesPanel() {
               new Blob([JSON.stringify(g)], { type: "application/json" }),
             );
             a.href = url;
-            a.download = "streetwear-empire-save.json";
+            a.download = "company-tycoon-save.json";
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
           }}
@@ -848,10 +903,17 @@ export function SavesPanel() {
                 if (!file) return;
                 if (file.size > 5_000_000)
                   throw new Error("Save file exceeds 5 MB.");
-                const game = validateSave(JSON.parse(await file.text()));
-                useGame.getState().setGame(game);
+                const imported = validateSave(JSON.parse(await file.text()));
+                const game = {
+                  ...imported,
+                  companyId: imported.companyId || crypto.randomUUID(),
+                };
                 if (!(await useGame.getState().save()))
-                  throw new Error("Imported save could not be persisted.");
+                  throw new Error(
+                    "Current company could not be saved; import was not applied.",
+                  );
+                await saveGame("autosave", game);
+                useGame.getState().setGame(game);
                 useGame.getState().notify("Save imported.");
               } catch (err) {
                 useGame.getState().notify((err as Error).message);
@@ -888,18 +950,32 @@ function Empty({
 }
 export function PanelContent({ panel }: { panel: string }) {
   switch (panel) {
+    case "map":
+      return <WorldMap />;
     case "wardrobe":
       return <Wardrobe />;
     case "design":
-      return <DesignPanel />;
+      return industryOf(useGame.getState().game!).id === "streetwear" ? (
+        <DesignPanel />
+      ) : (
+        <IndustryDesigner />
+      );
     case "production":
-      return <ProductionPanel />;
+      return industryOf(useGame.getState().game!).id === "streetwear" ? (
+        <ProductionPanel />
+      ) : (
+        <IndustryProduction />
+      );
     case "social":
       return <SocialPanel />;
     case "orders":
       return <OrdersPanel />;
     case "inventory":
-      return <InventoryPanel />;
+      return industryOf(useGame.getState().game!).id === "streetwear" ? (
+        <InventoryPanel />
+      ) : (
+        <IndustryInventory />
+      );
     case "finances":
       return <FinancePanel />;
     case "upgrades":

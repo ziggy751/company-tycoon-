@@ -15,7 +15,13 @@ function Block({
   onClick?: () => void;
 }) {
   return (
-    <mesh position={p} castShadow receiveShadow onClick={onClick}>
+    <mesh
+      position={p}
+      castShadow
+      receiveShadow
+      userData={{ cameraSolid: true }}
+      onClick={onClick}
+    >
       <boxGeometry args={s} />
       <meshStandardMaterial
         color={c}
@@ -189,7 +195,7 @@ export function Neighbourhood() {
           <Block p={[x, -0.03, 12.5]} s={[2, 0.1, 5]} c="#a8a79b" />
         </group>
       ))}
-      {[-30, -12, 11, 30].map((x, i) => (
+      {[-30, -12, 11, 41].map((x, i) => (
         <Tree key={i} x={x} z={i % 2 ? -10 : 11} />
       ))}
       {[-10, 10, 30].map((x) => (

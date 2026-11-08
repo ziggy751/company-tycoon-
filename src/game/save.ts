@@ -1,3 +1,4 @@
+import { industryOf, INDUSTRIES, TUTORIAL_TASKS } from "./industries";
 import { openDB } from "idb";
 import type { Game } from "./simulation";
 const db = () =>
@@ -18,6 +19,33 @@ export function validateSave(value: unknown): Game {
     typeof v === "string" && v.length <= max;
   const color = (v: unknown) =>
     typeof v === "string" && /^#[a-f0-9]{6}$/i.test(v);
+  if (g.industry !== undefined && !INDUSTRIES.some((i) => i.id === g.industry))
+    throw new Error("Unknown company industry.");
+  if (g.property !== undefined && !["home", "garage"].includes(g.property))
+    throw new Error("Invalid property.");
+  if (
+    g.labels !== undefined &&
+    (!Number.isSafeInteger(g.labels) || g.labels < 0 || g.labels > 100)
+  )
+    throw new Error("Invalid label inventory.");
+  if (
+    g.waypoint !== undefined &&
+    (!Array.isArray(g.waypoint) ||
+      g.waypoint.length !== 2 ||
+      g.waypoint.some((n) => !Number.isFinite(n)))
+  )
+    throw new Error("Invalid map marker.");
+  if (
+    g.onboarding &&
+    (!["pending", "active", "skipped", "complete"].includes(
+      g.onboarding.mode,
+    ) ||
+      typeof g.onboarding.rewarded !== "boolean" ||
+      !Array.isArray(g.onboarding.tasks) ||
+      new Set(g.onboarding.tasks).size !== g.onboarding.tasks.length ||
+      g.onboarding.tasks.some((t) => !TUTORIAL_TASKS.some(([id]) => id === t)))
+  )
+    throw new Error("Invalid tutorial progress.");
   if (g.version !== 1) throw new Error("Unsupported save version.");
   const nonnegative = (n: unknown) => Number.isSafeInteger(n) && Number(n) >= 0;
   if (
@@ -76,6 +104,10 @@ export function validateSave(value: unknown): Game {
     g.designs.some(
       (d) =>
         !nonnegative(d.stock) ||
+        !industryOf(g).products.includes(d.kind || "shirt") ||
+        (d.rawStock !== undefined && !nonnegative(d.rawStock)) ||
+        (d.prototypeApproved !== undefined &&
+          typeof d.prototypeApproved !== "boolean") ||
         !nonnegative(d.price) ||
         typeof d.id !== "string" ||
         !string(d.name, 40) ||
@@ -103,7 +135,16 @@ export function validateSave(value: unknown): Game {
         (o.status === "shipping" && !nonnegative(o.arrives)),
     ) ||
     g.jobs.some(
-      (j) => !string(j.id) || !designIds.has(j.designId) || !nonnegative(j.end),
+      (j) =>
+        !string(j.id) ||
+        !designIds.has(j.designId) ||
+        !nonnegative(j.end) ||
+        (j.kind !== undefined &&
+          !["print", "prototype", "contract", "inspect", "label"].includes(
+            j.kind,
+          )) ||
+        (j.quantity !== undefined &&
+          (!nonnegative(j.quantity) || j.quantity > 60)),
     )
   )
     throw new Error("Invalid order or production data.");
@@ -114,9 +155,9 @@ export function validateSave(value: unknown): Game {
         !string(e.label) ||
         !Number.isSafeInteger(e.amount) ||
         !nonnegative(e.time) ||
-        !["expense", "revenue"].includes(e.type) ||
+        !["expense", "revenue", "grant"].includes(e.type) ||
         (e.type === "expense" && e.amount > 0) ||
-        (e.type === "revenue" && e.amount < 0),
+        ((e.type === "revenue" || e.type === "grant") && e.amount < 0),
     ) ||
     new Set(g.ledger.map((e) => e.id)).size !== g.ledger.length ||
     50000 + g.ledger.reduce((n, e) => n + e.amount, 0) !== g.cash
@@ -132,6 +173,33 @@ export function validateSave(value: unknown): Game {
     g.player.some((n) => !Number.isFinite(n))
   )
     throw new Error("Invalid world data.");
+  const industry = industryOf(g).id;
+  if (
+    g.jobs.some((j) =>
+      !j.kind || j.kind === "print"
+        ? industry !== "streetwear"
+        : j.kind === "label"
+          ? industry !== "haircare"
+          : j.kind === "contract"
+            ? industry === "streetwear"
+            : industry !== "mtb",
+    )
+  )
+    throw new Error("Invalid industry job.");
+  if (
+    g.onboarding?.mode === "complete" &&
+    !TUTORIAL_TASKS.every(([t]) => g.onboarding!.tasks.includes(t))
+  )
+    throw new Error("Incomplete tutorial task evidence.");
+  const grants = g.ledger.filter((e) => e.type === "grant");
+  if (
+    grants.length > 1 ||
+    grants.some(
+      (e) => e.amount !== 10000 || e.label !== "Tutorial completion grant",
+    ) ||
+    (grants.length === 1 && !g.onboarding?.rewarded)
+  )
+    throw new Error("Invalid tutorial reward.");
   if (g.companyId !== undefined && !string(g.companyId, 100))
     throw new Error("Invalid company identity.");
   if (

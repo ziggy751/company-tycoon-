@@ -5,7 +5,10 @@ test("new game → design → manufacture → advertise → pack → ship → up
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
-  await page.getByRole("button", { name: "Start your story" }).click();
+  await page.getByRole("button", { name: "Create Company" }).click();
+  await page
+    .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
+    .click();
   await page.getByLabel("Company name").fill("NIGHT SHIFT");
   await page.getByRole("button", { name: "Open the studio" }).click();
   await expect(page.getByText("$500", { exact: true })).toBeVisible();
@@ -57,10 +60,13 @@ test("menu and mobile layout remain usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(
-    page.getByRole("button", { name: "Start your story" }),
+    page.getByRole("button", { name: "Create Company" }),
   ).toBeVisible();
   await page.screenshot({ path: "test-results/mobile-menu.png" });
-  await page.getByRole("button", { name: "Start your story" }).click();
+  await page.getByRole("button", { name: "Create Company" }).click();
+  await page
+    .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
+    .click();
   await page.getByRole("button", { name: "Open the studio" }).click();
   await page.getByRole("button", { name: "Supplies", exact: true }).click();
   await expect(page.getByRole("button", { name: "Buy 5 · $60" })).toBeVisible();
@@ -70,7 +76,10 @@ test("manual slots, local export/import and corrupt-save rejection", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Start your story" }).click();
+  await page.getByRole("button", { name: "Create Company" }).click();
+  await page
+    .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
+    .click();
   await page.getByRole("button", { name: "Open the studio" }).click();
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Manage saves" }).click();
@@ -84,7 +93,7 @@ test("manual slots, local export/import and corrupt-save rejection", async ({
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export save" }).click();
   const file = await download;
-  expect(file.suggestedFilename()).toBe("streetwear-empire-save.json");
+  expect(file.suggestedFilename()).toBe("company-tycoon-save.json");
   const path = await file.path();
   expect(path).toBeTruthy();
   await page.getByRole("button", { name: "Supplies", exact: true }).click();
@@ -112,13 +121,19 @@ test("two companies keep balances independent through switching and refresh", as
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Start your story" }).click();
+  await page.getByRole("button", { name: "Create Company" }).click();
+  await page
+    .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
+    .click();
   await page.getByLabel("Company name").fill("FIRST LABEL");
   await page.getByRole("button", { name: "Open the studio" }).click();
   await page.getByRole("button", { name: "Supplies", exact: true }).click();
   await page.getByRole("button", { name: "Buy 5 · $60" }).click();
   await page.getByRole("button", { name: "Save & return to menu" }).click();
-  await page.getByRole("button", { name: "Start your story" }).click();
+  await page.getByRole("button", { name: "Create Company" }).click();
+  await page
+    .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
+    .click();
   await page.getByLabel("Company name").fill("SECOND LABEL");
   await page.getByRole("button", { name: "Open the studio" }).click();
   await expect(page.getByText("$500", { exact: true })).toBeVisible();
@@ -185,7 +200,10 @@ test("manufactured wardrobe sample and home controls persist", async ({
     ),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Start your story" }).click();
+  await page.getByRole("button", { name: "Create Company" }).click();
+  await page
+    .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
+    .click();
   await page.getByRole("button", { name: "Open the studio" }).click();
   await page.getByRole("button", { name: "Toggle simulation speed" }).click();
   await page.getByRole("button", { name: "Design", exact: true }).click();
@@ -232,8 +250,21 @@ test("manufactured wardrobe sample and home controls persist", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Close workstation" }).click();
   await page.keyboard.down("KeyS");
-  await page.waitForTimeout(6500);
-  await page.keyboard.up("KeyS");
+  try {
+    await expect
+      .poll(
+        async () => {
+          const pose = await page
+            .locator(".world canvas")
+            .getAttribute("data-camera");
+          return Number(pose?.split(",")[5] || 0);
+        },
+        { timeout: 15000 },
+      )
+      .toBeGreaterThan(10);
+  } finally {
+    await page.keyboard.up("KeyS");
+  }
   await page.getByRole("button", { name: "Save journal" }).click();
   await expect(page.getByText("Saved locally", { exact: true })).toBeVisible();
   const position = await page.evaluate(async () => {
@@ -272,7 +303,10 @@ test("company deletion requires confirmation and updates Continue", async ({
     ),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Start your story" }).click();
+  await page.getByRole("button", { name: "Create Company" }).click();
+  await page
+    .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
+    .click();
   await page.getByLabel("Company name").fill("DELETE TEST");
   await page.getByRole("button", { name: "Open the studio" }).click();
   await page.getByRole("button", { name: "Save & return to menu" }).click();
@@ -291,4 +325,61 @@ test("company deletion requires confirmation and updates Continue", async ({
   await expect(
     page.getByRole("button", { name: "Continue", exact: true }),
   ).toBeDisabled();
+});
+test("a failed import preserves the current company instead of claiming success", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      "streetwear-settings",
+      JSON.stringify({ quality: "low", volume: 0, sensitivity: 1 }),
+    ),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Create Company", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
+    .click();
+  await page.getByLabel("Company name").fill("SAFE EXISTING");
+  await page.getByRole("button", { name: "Open the studio" }).click();
+  await page.getByRole("button", { name: "Save journal" }).click();
+  await expect(page.getByText("Saved locally", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Manage saves" }).click();
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    const w = window as unknown as { restorePut: () => void };
+    w.restorePut = () => {
+      IDBObjectStore.prototype.put = original;
+    };
+    IDBObjectStore.prototype.put = function (
+      ...args: Parameters<IDBObjectStore["put"]>
+    ) {
+      if (this.name === "companies")
+        throw new DOMException("Test quota exceeded", "QuotaExceededError");
+      return original.apply(this, args);
+    };
+  });
+  const { newGame } = await import("../src/game/simulation");
+  await page.locator("input[type=file]").setInputFiles({
+    name: "cannot-save.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(newGame("DO NOT IMPORT"))),
+  });
+  await expect(page.getByRole("status")).toContainText(
+    "import was not applied",
+  );
+  await expect(
+    page.getByText("SAFE EXISTING / BEDROOM STUDIO", { exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    (window as unknown as { restorePut: () => void }).restorePut();
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByText("SAFE EXISTING / BEDROOM STUDIO", { exact: true }),
+  ).toBeVisible();
 });

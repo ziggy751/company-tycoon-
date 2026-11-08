@@ -9,29 +9,31 @@ export function Wardrobe() {
         saleable piece permanently into your wardrobe. Switching outfits never
         creates stock.
       </p>
-      {g.designs.map((d) => (
-        <article className="order" key={d.id}>
-          <strong>{d.name}</strong>
-          <p>
-            {d.fit} · {d.stock} saleable ·{" "}
-            {g.wardrobe?.includes(d.id) ? "Sample owned" : "No sample yet"}
-          </p>
-          <button
-            className="primary full"
-            disabled={
-              g.equipped === d.id ||
-              (!g.wardrobe?.includes(d.id) && d.stock === 0)
-            }
-            onClick={() => dispatch({ type: "wear", id: d.id })}
-          >
-            {g.equipped === d.id
-              ? "Wearing this design"
-              : g.wardrobe?.includes(d.id)
-                ? "Wear sample"
-                : "Set aside one sample & wear"}
-          </button>
-        </article>
-      ))}
+      {g.designs
+        .filter((d) => !d.kind || d.kind === "shirt")
+        .map((d) => (
+          <article className="order" key={d.id}>
+            <strong>{d.name}</strong>
+            <p>
+              {d.fit} · {d.stock} saleable ·{" "}
+              {g.wardrobe?.includes(d.id) ? "Sample owned" : "No sample yet"}
+            </p>
+            <button
+              className="primary full"
+              disabled={
+                g.equipped === d.id ||
+                (!g.wardrobe?.includes(d.id) && d.stock === 0)
+              }
+              onClick={() => dispatch({ type: "wear", id: d.id })}
+            >
+              {g.equipped === d.id
+                ? "Wearing this design"
+                : g.wardrobe?.includes(d.id)
+                  ? "Wear sample"
+                  : "Set aside one sample & wear"}
+            </button>
+          </article>
+        ))}
       <button
         className="secondary full"
         onClick={() => dispatch({ type: "wear", id: "" })}

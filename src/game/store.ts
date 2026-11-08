@@ -1,7 +1,12 @@
+import {
+  DEFAULT_CONTROLS,
+  normalizeControls,
+  type ControlSettings,
+} from "./controls";
 import { create } from "zustand";
 import { act, tick, type Action, type Game } from "./simulation";
 import { saveGame } from "./save";
-type Settings = {
+type Settings = ControlSettings & {
   quality: "low" | "high";
   sensitivity: number;
   volume: number;
@@ -10,6 +15,7 @@ type Settings = {
 };
 type Store = {
   game: Game | null;
+  playing: boolean;
   panel: string | null;
   paused: boolean;
   speed: number;
@@ -27,12 +33,14 @@ type Store = {
 let saveQueue = Promise.resolve();
 export const useGame = create<Store>((set, get) => ({
   game: null,
+  playing: false,
   panel: null,
   paused: false,
   speed: 1,
   notice: "",
   saveStatus: "Not saved yet",
   settings: {
+    ...DEFAULT_CONTROLS,
     quality: "high",
     sensitivity: 1,
     volume: 0.15,
@@ -45,9 +53,28 @@ export const useGame = create<Store>((set, get) => ({
       panel: null,
       paused: false,
     }),
-  open: (panel) => set({ panel }),
+  open: (panel) => {
+    const g = get().game;
+    if (
+      g &&
+      g.onboarding?.mode === "active" &&
+      (panel === "design" || panel === "finances")
+    ) {
+      set({
+        game: act(g, {
+          type: "tutorial-event",
+          task: panel === "design" ? "computer" : "finances",
+        }),
+        panel,
+      });
+      void get().save();
+    } else set({ panel });
+  },
   notify: (notice) => set({ notice }),
-  configure: (s) => set({ settings: { ...get().settings, ...s } }),
+  configure: (s) => {
+    const next = { ...get().settings, ...s };
+    set({ settings: { ...next, ...normalizeControls(next) } });
+  },
   dispatch: (a) => {
     try {
       const g = get().game;
@@ -62,7 +89,13 @@ export const useGame = create<Store>((set, get) => ({
   },
   step: () => {
     const { game, paused, speed, panel } = get();
-    if (game && !paused && panel !== "settings" && panel !== "saves") {
+    if (
+      game &&
+      !paused &&
+      panel !== "settings" &&
+      panel !== "saves" &&
+      panel !== "account"
+    ) {
       set({ game: tick(game, speed) });
       if (get().game!.time % 10 === 0) void get().save();
     }
@@ -70,17 +103,21 @@ export const useGame = create<Store>((set, get) => ({
   save: async (slot = "autosave") => {
     const g = get().game;
     if (!g) return false;
+    set({ saveStatus: "Saving…" });
     const snapshot = structuredClone(g);
-    saveQueue = saveQueue.catch(() => {}).then(() => saveGame(slot, snapshot));
+    const operation = (saveQueue = saveQueue
+      .catch(() => {})
+      .then(() => saveGame(slot, snapshot)));
     try {
-      await saveQueue;
-      set({ saveStatus: "Saved locally" });
+      await operation;
+      if (operation === saveQueue) set({ saveStatus: "Saved locally" });
       return true;
     } catch (e) {
-      set({
-        saveStatus: "Save failed",
-        notice: "Could not save: " + (e as Error).message,
-      });
+      if (operation === saveQueue)
+        set({
+          saveStatus: "Save failed",
+          notice: "Could not save: " + (e as Error).message,
+        });
       return false;
     }
   },

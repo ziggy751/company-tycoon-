@@ -1,3 +1,7 @@
+# Latest state
+
+See **INDUSTRIES_RELEASE.md** for the current three-industry implementation, product families, tutorial reward, actual garage progression, control fixes, assets and test evidence. The notes below document the earlier bedroom increment and are retained as development history.
+
 # Development progress
 
 Current phase: **Phase 1 — playable bedroom vertical slice**.
@@ -61,3 +65,5 @@ Current phase: **Phase 1 — playable bedroom vertical slice**.
 ## Company Tycoon overhaul
 
 See OVERHAUL_PROGRESS.md for the latest changes and remaining requirements. The new multi-company registry supersedes the former single-autosave limitation. Assets remain procedural, and streetwear remains the sole playable industry.
+
+The current release includes three actual business loops, five product families, optional one-time tutorial grants, earned garage ownership, shared map waypoints, authored CC0 chair art, and controls/save-status fixes. See INDUSTRIES_RELEASE.md for the verification record and explicit remaining scope. No realistic humanoid rig or full furniture editor has been delivered.

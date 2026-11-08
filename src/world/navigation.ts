@@ -1,5 +1,7 @@
 export function blocked(x: number, z: number, doorOpen: boolean) {
   if (Math.abs(x) > 43 || z < -30 || z > 36) return true;
+  if (x > 6.8 && x < 9.2 && z > 9.9 && z < 14.1) return true; // parked vehicle
+  if (x > -2.1 && x < -0.7 && z > -2.4 && z < -1) return true; // chair
   // Solid home envelope, with two genuine door apertures.
   if (Math.abs(x) < 5.2 && Math.abs(x) > 4.6 && z > -4.2 && z < 10.2)
     return true;
@@ -21,6 +23,13 @@ export function blocked(x: number, z: number, doorOpen: boolean) {
   if (x > 2.5 && x < 4.6 && z > 4.5 && z < 7.4) return true; // kitchen
   for (const hx of [-18, 18])
     if (Math.abs(x - hx) < 5.6 && z > -4.5 && z < 10.5) return true;
+  if (x > 23.7 && x < 36.3 && z > -19.3 && z < -8.7) {
+    if (x < 24.3 || x > 35.7 || z < -18.7) return true;
+    if (z > -9.3 && Math.abs(x - 30) > 1.2) return true;
+    if (x > 25 && x < 29 && z > -18 && z < -15.2) return true;
+    if (x > 31 && x < 35 && z > -13 && z < -11) return true;
+    if (x > 32.8 && x < 35.2 && z > -17.2 && z < -14.8) return true;
+  }
   return false;
 }
 

@@ -1,6 +1,6 @@
-# Streetwear Empire
+# Company Tycoon
 
-A playable, offline-first 3D streetwear business simulator. This initial chapter implements the bedroom business loop, not the full city/factory roadmap.
+A playable, offline-first 3D streetwear business simulator. This chapter implements three distinct starter-business loops and earned garage expansion, not the full city/factory roadmap.
 
 ## Develop
 
@@ -24,7 +24,7 @@ Browser tests default to `/usr/bin/chromium`. Set `CHROMIUM_PATH` to another ins
 
 ## First sale
 
-1. Start your story and create a brand.
+1. Select Create Company, choose Streetwear & Clothing, and create a brand.
 2. Design: customise the 3D shirt, then save it as a product.
 3. Produce: print a shirt. One blank and $4 ink are consumed; wait 12 simulation seconds.
 4. SocialHub: publish a $5 promotional post while finished stock is available.
@@ -33,7 +33,7 @@ Browser tests default to `/usr/bin/chromium`. Set `CHROMIUM_PATH` to another ins
 
 A product priced above the current audience's budget will not sell. Reprice in the Design catalogue. The default $39 works for the starting audience. A promotion can generate up to three orders if inventory remains available. Repeated posts have a 35-second cooldown.
 
-WASD moves, Shift sprints, Space hops, dragging orbits, scrolling zooms, E uses a nearby station, Tab opens the phone, I opens inventory, B opens workspace, M shows the room guide, and Esc closes a panel or opens settings. Clickable station labels and the dock provide trackpad-friendly alternatives.
+WASD moves, Shift sprints, Space hops, dragging orbits, scrolling zooms, E uses a nearby station, Tab opens the phone, I opens inventory, B opens workspace, M opens the neighbourhood map, and Esc closes a panel or opens settings. Clickable station labels and the dock provide trackpad-friendly alternatives.
 
 Autosave runs after transactions and every 10 simulation seconds. Three manual slots, JSON export/import, and save validation are available in Settings → Manage saves. Simulation does not advance while the page is hidden or while save/settings panels are open. No offline income is invented.
 
@@ -56,3 +56,11 @@ See GAME_PROGRESS.md, GAME_DESIGN.md and BALANCING.md for scope and extension po
 ## Company Tycoon update
 
 The latest increment adds a grounded home/neighbourhood, walkable entrance, usable door, day/night and interior lights, wardrobe samples, and independent companies. Use **My Companies** on the main menu to switch businesses. Opening the wardrobe requires a manufactured sample to wear your design; that piece moves out of saleable stock. Existing IndexedDB saves migrate without deleting the originals. See OVERHAUL_PROGRESS.md for exact scope and unfinished roadmap.
+
+## Three playable industries
+
+Use **Create Company** and choose Streetwear, MTB Accessories or Hair & Styling Accessories. MTB uses paid prototyping, specialist manufacturing batches and incoming inspection. Hair accessories use supplier sourcing and label application. Both have actual accessory previews, separate stock states and distinct equipment. They do not use the clothing heat press. Each company has its own local autosave and backups.
+
+The optional tutorial awards a single $100 grant after eleven real tasks. A gated garage purchase expands the world workspace, storage and sourced batch size. M opens the neighbourhood map. Settings includes control rebinding, mouse/trackpad and sensitivity controls. Primary click/drag and scroll cover all camera interactions.
+
+See INDUSTRIES_RELEASE.md for a precise completion report, BALANCING.md for costs, and ASSETS.md for the locally bundled CC0 chair. To run production browser tests, build first and use `TEST_PRODUCTION=1 npm run test:browser`. Firefox/WebKit browser binaries must be installed separately where network policy and OS support permit; the supplied default config uses system Chromium.

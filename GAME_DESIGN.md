@@ -2,7 +2,7 @@
 
 ## Vision
 
-Grow an independent label through real product margins and fulfilment, from bedroom to global company. Start with tangible work and reward the first five delivered shirts. Expansion must preserve the working loop before adding complexity.
+Grow an independent company through real product margins and fulfilment, from bedroom to global company. Start with tangible work and reward the first five delivered shirts. Expansion must preserve the working loop before adding complexity.
 
 ## The bedroom loop
 
@@ -31,3 +31,7 @@ Warm cotton, muted sage, timber and steel. A cutaway bedroom gives a readable th
 ## Save contract
 
 Version 1 saves include all implemented company, economic, time, design, world, job and order data. Settings are localStorage preferences independent of the campaign. Load validates structure, relationships and the balance-to-ledger reconciliation. Future schema changes must add explicit migrations and round-trip tests. Browser backups must remain local unless the user separately authorises future cloud storage.
+
+## Implemented multi-industry extension
+
+`industries.ts` defines the three playable industries and five product families. `simulation.ts` uses explicit prototype, supplier-contract, inspection, label and print transitions; `ProductModel.tsx` renders the corresponding saved family rather than a renamed shirt. `IndustryPanels.tsx` exposes the distinct workflows. Old saves retain streetwear behaviour by default. Optional tutorial tasks and a single grant are part of the same deterministic state/ledger; the garage has real eligibility, paid ownership, space, capacity and batching changes. Current scope and unfinished requirements are detailed in INDUSTRIES_RELEASE.md.

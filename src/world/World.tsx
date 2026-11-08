@@ -1,3 +1,10 @@
+import { PointerRecovery } from "./PointerRecovery";
+import { LoadedChair } from "./LoadedChair";
+import { industryOf } from "../game/industries";
+import { IndustryEquipment } from "./IndustryEquipment";
+import { Garage } from "./Garage";
+import { editing } from "../game/controls";
+import { CameraCollision } from "./CameraCollision";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
@@ -34,6 +41,7 @@ function Box({
       smoothness={2}
       castShadow
       receiveShadow
+      userData={{ cameraSolid: true }}
       {...props}
     >
       <meshStandardMaterial
@@ -93,8 +101,17 @@ function Legs({
 }
 function Press() {
   const moving = useRef<THREE.Group>(null);
-  const busy = useGame((s) => !!s.game?.jobs.length);
+  const busy = useGame(
+    (s) => !!s.game?.jobs.length && s.game.property !== "garage",
+  );
+  const invalidate = useThree((s) => s.invalidate);
+  const paused = useGame(
+    (s) =>
+      s.paused || !s.playing || ["settings", "saves"].includes(s.panel || ""),
+  );
   useFrame(({ clock }) => {
+    if (paused) return;
+    if (busy) invalidate();
     if (moving.current)
       moving.current.rotation.x = busy
         ? Math.sin(clock.elapsedTime * 2) * 0.13
@@ -124,11 +141,72 @@ function Founder() {
   const legs = useRef<THREE.Group>(null);
   const keys = useRef(new Set<string>());
   const walk = useRef(0);
-  const { camera, controls } = useThree();
+  const travelled = useRef(0);
+  const lastMotion = useRef(performance.now());
+  const settings = useGame((s) => s.settings);
+  const { camera, controls, gl, invalidate } = useThree();
+  useEffect(
+    () =>
+      useGame.subscribe((state, previous) => {
+        if (
+          (state.panel !== previous.panel && state.panel) ||
+          (state.playing !== previous.playing && !state.playing)
+        ) {
+          keys.current.clear();
+          lastMotion.current = performance.now();
+          invalidate();
+        }
+      }),
+    [invalidate],
+  );
+  const look = useRef({ yaw: 0, pitch: 0 });
+  useEffect(() => {
+    if (!settings.firstPerson) return;
+    const canvas = gl.domElement;
+    let point: { x: number; y: number; id: number } | null = null;
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0 && e.button !== 2) return;
+      point = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      canvas.setPointerCapture(e.pointerId);
+    };
+    const move = (e: PointerEvent) => {
+      if (!point) return;
+      const sensitivity = useGame.getState().settings.sensitivity * 0.004;
+      look.current.yaw -= (e.clientX - point.x) * sensitivity;
+      look.current.pitch = THREE.MathUtils.clamp(
+        look.current.pitch -
+          (e.clientY - point.y) *
+            sensitivity *
+            (useGame.getState().settings.invert ? -1 : 1),
+        -1.35,
+        1.35,
+      );
+      invalidate();
+      point.x = e.clientX;
+      point.y = e.clientY;
+    };
+    const up = () => {
+      if (point && canvas.hasPointerCapture(point.id))
+        canvas.releasePointerCapture(point.id);
+      point = null;
+    };
+    canvas.addEventListener("pointerdown", down);
+    canvas.addEventListener("pointermove", move);
+    canvas.addEventListener("pointerup", up);
+    canvas.addEventListener("pointercancel", up);
+    window.addEventListener("blur", up);
+    return () => {
+      canvas.removeEventListener("pointerdown", down);
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerup", up);
+      canvas.removeEventListener("pointercancel", up);
+      window.removeEventListener("blur", up);
+    };
+  }, [gl, settings.firstPerson]);
   const outfit = useGame((s) =>
     s.game!.designs.find((d) => d.id === s.game!.equipped),
   );
-  const settings = useGame((s) => s.settings);
+
   const position = useRef(
     new THREE.Vector3(
       ...([
@@ -142,40 +220,72 @@ function Founder() {
     const p = position.current;
     camera.position.set(p.x + 10, 13, p.z + 12);
     const orbit = controls as unknown as { target: THREE.Vector3 } | null;
-    orbit?.target.set(p.x, 0.6, p.z - 2);
+    orbit?.target.set(p.x, 0.9, p.z);
   }, [camera, controls]);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (editing(e.target) || useGame.getState().panel) return;
       if (
-        (e.target as HTMLElement).closest("input,textarea,select") ||
-        useGame.getState().panel
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        (e.repeat && e.code === useGame.getState().settings.keys.interact)
       )
         return;
+      if (!useGame.getState().playing) return;
+      if (keys.current.size === 0) lastMotion.current = performance.now();
       keys.current.add(e.code);
+      invalidate();
       if (["Space", "ArrowUp", "ArrowDown"].includes(e.code))
         e.preventDefault();
-      if (e.code === "KeyE") {
+      if (e.code === useGame.getState().settings.keys.interact) {
         const p = position.current;
         const stations: [number, number, string][] = [
           [-1.6, -2, "design"],
+          [
+            27,
+            -16,
+            useGame.getState().game?.property === "garage"
+              ? "production"
+              : "upgrades",
+          ],
+          [
+            33,
+            -12,
+            useGame.getState().game?.property === "garage"
+              ? "orders"
+              : "upgrades",
+          ],
           [-4.2, 8, "wardrobe"],
           [0, 3, "door"],
           [3.3, -1.6, "production"],
           [3.5, 1.4, "orders"],
         ];
-        const near = stations.find(
-          ([x, z]) => Math.hypot(p.x - x, p.z - z) < 2,
-        );
+        const near = stations
+          .filter(([x, z]) => Math.hypot(p.x - x, p.z - z) < 2)
+          .sort(
+            (a, b) =>
+              Math.hypot(p.x - a[0], p.z - a[1]) -
+              Math.hypot(p.x - b[0], p.z - b[1]),
+          )[0];
         if (near?.[2] === "door") useGame.getState().dispatch({ type: "door" });
         else if (near) useGame.getState().open(near[2]);
         else
           useGame
             .getState()
-            .notify("Walk closer to the desk, heat press, or packing station.");
+            .notify(
+              "Walk closer to a workstation or open its tool from the dock.",
+            );
       }
     };
-    const up = (e: KeyboardEvent) => keys.current.delete(e.code);
-    const blur = () => keys.current.clear();
+    const up = (e: KeyboardEvent) => {
+      keys.current.delete(e.code);
+      invalidate();
+    };
+    const blur = () => {
+      keys.current.clear();
+      invalidate();
+    };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
@@ -187,17 +297,37 @@ function Founder() {
   }, []);
   useFrame((_, delta) => {
     if (!ref.current) return;
+    const now = performance.now();
+    const movementDelta = Math.min(
+      Math.max((now - lastMotion.current) / 1000, 0),
+      5,
+    );
+    lastMotion.current = now;
     const k = keys.current;
     const st = useGame.getState();
-    const canMove = !st.panel && !st.paused;
-    let dx = canMove ? Number(k.has("KeyD")) - Number(k.has("KeyA")) : 0;
-    let dz = canMove ? Number(k.has("KeyS")) - Number(k.has("KeyW")) : 0;
+    const canMove = st.playing && !st.panel && !st.paused;
+    let dx = canMove
+      ? Number(k.has(settings.keys.right)) - Number(k.has(settings.keys.left))
+      : 0;
+    let dz = canMove
+      ? Number(k.has(settings.keys.back)) - Number(k.has(settings.keys.forward))
+      : 0;
     const moving = !!(dx || dz);
+    if (moving || (canMove && k.has(settings.keys.jump))) invalidate();
     if (moving) {
       const n = Math.hypot(dx, dz);
-      const speed = (k.has("ShiftLeft") ? 3.6 : 2.1) * Math.min(delta, 1);
+      const speed =
+        (k.has(settings.keys.sprint) ? 3.6 : 2.1) *
+        settings.movementSensitivity *
+        movementDelta;
       dx = (dx / n) * speed;
       dz = (dz / n) * speed;
+      if (settings.firstPerson) {
+        const x = dx,
+          z = dz;
+        dx = x * Math.cos(look.current.yaw) - z * Math.sin(look.current.yaw);
+        dz = x * Math.sin(look.current.yaw) + z * Math.cos(look.current.yaw);
+      }
       const p = position.current;
       const previous = p.clone();
       const next = movePlayer([p.x, p.z], dx, dz, !!st.game?.doorOpen);
@@ -211,10 +341,19 @@ function Founder() {
       }
       ref.current.rotation.y = Math.atan2(dx, dz);
       walk.current += delta * 9;
-      if (st.game) st.game.player = [p.x, p.z];
+      if (st.game) {
+        st.game.player = [p.x, p.z];
+        travelled.current += p.distanceTo(previous);
+        if (
+          travelled.current >= 2 &&
+          st.game.onboarding?.mode === "active" &&
+          !st.game.onboarding.tasks.includes("move")
+        )
+          st.dispatch({ type: "tutorial-event", task: "move" });
+      }
     }
     const jump =
-      canMove && k.has("Space")
+      canMove && k.has(settings.keys.jump)
         ? Math.abs(Math.sin(walk.current + performance.now() / 250)) * 0.28
         : 0;
     ref.current.position.copy(position.current);
@@ -228,15 +367,41 @@ function Founder() {
         ? -Math.sin(walk.current) * 0.4
         : 0;
     }
-    ref.current.visible = !settings.firstPerson;
+    ref.current.visible =
+      !settings.firstPerson &&
+      camera.position.distanceTo(
+        position.current.clone().add(new THREE.Vector3(0, 1.3, 0)),
+      ) > 0.8;
     if (settings.firstPerson) {
       camera.position.lerp(
         position.current.clone().add(new THREE.Vector3(0, 1.55, 0.1)),
         0.2,
       );
-      camera.lookAt(
-        position.current.clone().add(new THREE.Vector3(0, 1.5, -3)),
+      const eye = position.current.clone().add(new THREE.Vector3(0, 1.55, 0.1));
+      const target = eye
+        .clone()
+        .add(
+          new THREE.Vector3(
+            Math.sin(look.current.yaw) * Math.cos(look.current.pitch),
+            Math.sin(look.current.pitch),
+            -Math.cos(look.current.yaw) * Math.cos(look.current.pitch),
+          ),
+        );
+      const matrix = new THREE.Matrix4().lookAt(
+        camera.position,
+        target,
+        new THREE.Vector3(0, 1, 0),
       );
+      camera.quaternion.slerp(
+        new THREE.Quaternion().setFromRotationMatrix(matrix),
+        1 - Math.exp(-15 * delta),
+      );
+      if (
+        camera.quaternion.angleTo(
+          new THREE.Quaternion().setFromRotationMatrix(matrix),
+        ) > 0.002
+      )
+        invalidate();
     }
   });
   return (
@@ -461,12 +626,36 @@ function Room() {
         <Box p={[-1.6, 1.51, -2.98]} s={[0.9, 0.66, 0.045]} c="#252b27" />
         <Box p={[-1.6, 1.52, -2.948]} s={[0.82, 0.56, 0.012]} c="#d9ed91" />
       </group>
-      <Box p={[-1.4, 0.58, -1.7]} s={[0.65, 0.12, 0.65]} c="#3f4b40" />
-      <Box p={[-1.4, 0.95, -1.4]} s={[0.65, 0.65, 0.08]} c="#3f4b40" />
-      <Legs x={-1.4} z={-1.7} w={0.6} d={0.6} h={0.55} />
+      {useGame.getState().settings.quality === "high" ? (
+        <Suspense
+          fallback={
+            <>
+              {" "}
+              <Box p={[-1.4, 0.58, -1.7]} s={[0.65, 0.12, 0.65]} c="#3f4b40" />
+              <Box p={[-1.4, 0.95, -1.4]} s={[0.65, 0.65, 0.08]} c="#3f4b40" />
+              <Legs x={-1.4} z={-1.7} w={0.6} d={0.6} h={0.55} />
+            </>
+          }
+        >
+          <LoadedChair />
+        </Suspense>
+      ) : (
+        <>
+          {" "}
+          <Box p={[-1.4, 0.58, -1.7]} s={[0.65, 0.12, 0.65]} c="#3f4b40" />
+          <Box p={[-1.4, 0.95, -1.4]} s={[0.65, 0.65, 0.08]} c="#3f4b40" />
+          <Legs x={-1.4} z={-1.7} w={0.6} d={0.6} h={0.55} />
+        </>
+      )}
       <Box p={[3.3, 1, -2.6]} s={[2.1, 0.14, 1.3]} />
       <Legs x={3.3} z={-2.6} w={2.1} d={1.3} />
-      <Press />
+      {industryOf(game).id === "streetwear" ? (
+        <Press />
+      ) : (
+        <group position={[3.3, 1.08, -2.6]}>
+          <IndustryEquipment />
+        </group>
+      )}
       <Box p={[3.8, 0.95, 2.3]} s={[1.65, 0.12, 1.6]} />
       <Legs x={3.8} z={2.3} w={1.65} d={1.6} h={0.9} />
       {[0, 1, 2].map((i) => (
@@ -478,16 +667,22 @@ function Room() {
         />
       ))}
       <Box p={[4.3, 1.08, 2]} s={[0.2, 0.2, 0.3]} c="#303a30" />
-      <group position={[0.8, 0, -3.2]}>
+      <group
+        position={[0.8, 0, -3.2]}
+        visible={industryOf(game).id === "streetwear"}
+      >
         {[-0.7, 0.7].map((x) => (
           <Box key={x} p={[x, 1.1, 0]} s={[0.04, 2.2, 0.04]} c={steel} />
         ))}
         <Box p={[0, 2.18, 0]} s={[1.45, 0.04, 0.04]} c={steel} />
-        {game.designs.slice(0, 3).map((d, i) => (
-          <group key={d.id} position={[-0.45 + i * 0.45, 1.68, 0]}>
-            <Garment design={d} scale={0.4} />
-          </group>
-        ))}
+        {game.designs
+          .filter((d) => !d.kind || d.kind === "shirt")
+          .slice(0, 3)
+          .map((d, i) => (
+            <group key={d.id} position={[-0.45 + i * 0.45, 1.68, 0]}>
+              <Garment design={d} scale={0.4} />
+            </group>
+          ))}
       </group>
       {Array.from({ length: Math.min(game.blanks, 5) }, (_, i) => (
         <Box
@@ -518,12 +713,22 @@ function Room() {
         Design studio
       </Label>
       <Label at={[3.3, 2.2, -2.6]} onClick={() => open("production")}>
-        Heat press {game.jobs.length ? "· printing" : ""}
+        {industryOf(game).equipment} {game.jobs.length ? "· working" : ""}
       </Label>
       <Label at={[3.6, 1.85, 2.3]} onClick={() => open("orders")}>
         Packing station
       </Label>
       <Neighbourhood />
+      <Garage />
+      {game.waypoint && (
+        <mesh
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[game.waypoint[0], 0.04, game.waypoint[1]]}
+        >
+          <ringGeometry args={[0.5, 0.65, 32]} />
+          <meshBasicMaterial color="#e6be52" side={THREE.DoubleSide} />
+        </mesh>
+      )}
       {game.lightsOn !== false && (
         <pointLight
           position={[0, 3, 1]}
@@ -533,7 +738,9 @@ function Room() {
         />
       )}
       <StudioDetails />
-      <Founder key={game.companyId} />
+      <Founder
+        key={(game.companyId || "legacy") + ":" + (game.property || "home")}
+      />
       {useGame.getState().settings.quality === "high" && (
         <ContactShadows
           position={[0, 0.02, 0]}
@@ -548,6 +755,7 @@ function Room() {
   );
 }
 export function World() {
+  const enabled = useGame((s) => s.playing && !s.panel);
   const settings = useGame((s) => s.settings);
   const [failed, setFailed] = useState(false);
   return (
@@ -559,6 +767,7 @@ export function World() {
         </div>
       ) : (
         <Canvas
+          frameloop="demand"
           shadows={settings.quality === "high"}
           dpr={settings.quality === "high" ? [1, 1.75] : 1}
           camera={{ position: [10, 13, 14], fov: 43 }}
@@ -579,20 +788,27 @@ export function World() {
           {!settings.firstPerson && (
             <OrbitControls
               makeDefault
+              enabled={enabled}
               target={[0, 0.6, 0]}
-              minDistance={7}
-              maxDistance={22}
+              minDistance={0.3}
+              maxDistance={28}
               maxPolarAngle={Math.PI / 2.15}
               minPolarAngle={0.25}
               enablePan={false}
+              enableDamping
+              dampingFactor={settings.damping}
+              zoomSpeed={settings.zoomSensitivity}
+              onStart={() => useGame.getState().notify("")}
               rotateSpeed={settings.sensitivity * (settings.invert ? -1 : 1)}
               mouseButtons={{
                 LEFT: THREE.MOUSE.ROTATE,
-                MIDDLE: THREE.MOUSE.DOLLY,
+                MIDDLE: undefined as unknown as THREE.MOUSE,
                 RIGHT: THREE.MOUSE.ROTATE,
               }}
             />
           )}
+          {!settings.firstPerson && <CameraCollision />}
+          <PointerRecovery enabled={enabled} />
         </Canvas>
       )}
     </div>

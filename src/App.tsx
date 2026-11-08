@@ -1,3 +1,8 @@
+import { MenuPreferences } from "./ui/MenuPreferences";
+import { industryOf, type IndustryId } from "./game/industries";
+import { IndustrySelect } from "./ui/IndustrySelect";
+import { Tutorial } from "./ui/Tutorial";
+import { DEFAULT_CONTROLS, editing } from "./game/controls";
 import { Companies } from "./ui/Companies";
 import { useEffect, useState, Component, type ReactNode } from "react";
 import {
@@ -70,7 +75,11 @@ function sound() {
   }
 }
 export default function App() {
-  const [screen, setScreen] = useState<"menu" | "create" | "game">("menu");
+  const [screen, setScreen] = useState<"menu" | "industry" | "create" | "game">(
+    "menu",
+  );
+  const [industry, setIndustry] = useState<IndustryId>("streetwear");
+  const [menuSettings, setMenuSettings] = useState(false);
   const [companies, setCompanies] = useState(false);
   const [available, setAvailable] = useState(false),
     [credits, setCredits] = useState(false),
@@ -101,7 +110,11 @@ export default function App() {
           Number.isFinite(p.volume) &&
           Number.isFinite(p.sensitivity)
         )
-          useGame.getState().configure(p);
+          useGame.getState().configure({
+            ...DEFAULT_CONTROLS,
+            ...p,
+            keys: { ...DEFAULT_CONTROLS.keys, ...p.keys },
+          });
       }
     } catch {
       useGame.getState().notify("Settings could not be restored.");
@@ -140,21 +153,31 @@ export default function App() {
   }, [notice]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (
-        screen !== "game" ||
-        (e.target as HTMLElement).closest("input,textarea,select")
-      )
+      if (screen !== "game") {
+        if (e.code === "Escape") {
+          setMenuSettings(false);
+          setCompanies(false);
+          setCredits(false);
+          setGuide(false);
+          if (screen !== "menu") setScreen("menu");
+        }
         return;
+      }
+      if (editing(e.target) && e.code !== "Escape") return;
       const s = useGame.getState();
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (s.panel && e.code !== "Escape") return;
       if (e.code === "Escape") s.open(s.panel ? null : "settings");
-      if (e.code === "Tab") {
+      if (e.code === s.settings.keys.phone) {
         e.preventDefault();
         s.open(s.panel === "social" ? null : "social");
       }
-      if (e.code === "KeyI")
+      if (e.code === s.settings.keys.inventory)
         s.open(s.panel === "inventory" ? null : "inventory");
-      if (e.code === "KeyB") s.open(s.panel === "upgrades" ? null : "upgrades");
-      if (e.code === "KeyM") setGuide((x) => !x);
+      if (e.code === s.settings.keys.workspace)
+        s.open(s.panel === "upgrades" ? null : "upgrades");
+      if (e.code === s.settings.keys.map)
+        s.open(s.panel === "map" ? null : "map");
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -166,6 +189,9 @@ export default function App() {
     open(null);
     setScreen("menu");
   };
+  useEffect(() => {
+    useGame.setState({ playing: screen === "game" });
+  }, [screen]);
   const resume = async () => {
     try {
       const s = await loadGame("autosave");
@@ -217,35 +243,22 @@ export default function App() {
               starts <em>somewhere.</em>
             </h1>
             <p>
-              A bedroom. Five blank shirts. Five hundred dollars.
+              A home workspace. Your own industry. Five hundred dollars.
               <br />
               Build something that has your name on it.
             </p>
             <button
               className="primary menu-start"
-              onClick={() => setScreen("create")}
+              onClick={() => setScreen("industry")}
             >
-              Start your story <ArrowUpRight size={20} />
+              Create Company <ArrowUpRight size={20} />
             </button>
             <div className="menu-links">
               <button disabled={!available} onClick={resume}>
                 Continue <ArrowRight size={14} />
               </button>
               <button onClick={() => setCompanies(true)}>My Companies</button>
-              <button
-                onClick={async () => {
-                  try {
-                    const saved = await loadGame("autosave");
-                    if (saved) useGame.getState().setGame(saved.game);
-                    setScreen("game");
-                    open("settings");
-                  } catch (e) {
-                    useGame.getState().notify((e as Error).message);
-                  }
-                }}
-              >
-                Settings
-              </button>
+              <button onClick={() => setMenuSettings(true)}>Settings</button>
               <button onClick={() => setCredits(true)}>Credits</button>
             </div>
           </main>
@@ -268,6 +281,15 @@ export default function App() {
           </footer>
         </div>
       )}
+      {screen === "industry" && (
+        <IndustrySelect
+          back={() => setScreen("menu")}
+          choose={(id) => {
+            setIndustry(id);
+            setScreen("create");
+          }}
+        />
+      )}
       {screen === "create" && (
         <div className="modal-shade">
           <form
@@ -276,7 +298,9 @@ export default function App() {
               e.preventDefault();
               useGame
                 .getState()
-                .setGame(newGame(brand, slogan, accent, aesthetic, founder));
+                .setGame(
+                  newGame(brand, slogan, accent, aesthetic, founder, industry),
+                );
               void useGame.getState().save();
               setScreen("game");
             }}
@@ -291,6 +315,7 @@ export default function App() {
             </button>
             <div className="eyebrow">CHAPTER ONE / YOUR NAME ON THE LABEL</div>
             <h1>Begin independent.</h1>
+            <p className="selected-industry">{industryOf({ industry }).name}</p>
             <p>A brand is a point of view. What’s yours?</p>
             {available && (
               <p className="warning">
@@ -356,8 +381,19 @@ export default function App() {
             </label>
             <div className="starting-note">
               <span>YOUR STARTING KIT</span>
-              <b>$500 · 5 cotton blanks · 5 mailers</b>
-              <small>One laptop, one heat press, one very big idea.</small>
+              <b>
+                $500 ·{" "}
+                {industry === "streetwear"
+                  ? "5 cotton blanks"
+                  : industry === "haircare"
+                    ? "5 paper labels"
+                    : "Prototype tools"}{" "}
+                · 5 mailers
+              </b>
+              <small>
+                {industryOf({ industry }).equipment} ·{" "}
+                {industryOf({ industry }).supplier}
+              </small>
             </div>
             <button className="primary full" type="submit">
               Open the studio <ArrowRight size={17} />
@@ -376,7 +412,12 @@ export default function App() {
               <span className="mark">se.</span>
               <div>
                 <b>COMPANY TYCOON</b>
-                <small>{g.brand} / BEDROOM STUDIO</small>
+                <small>
+                  {g.brand} /{" "}
+                  {g.property === "garage"
+                    ? "GARAGE WORKSHOP"
+                    : "BEDROOM STUDIO"}
+                </small>
               </div>
             </button>
             <div className="hud-stats">
@@ -401,7 +442,10 @@ export default function App() {
             </div>
             <div className="clock">
               <small>
-                DAY {Math.floor(g.time / 240) + 1} · BEDROOM STARTUP
+                DAY {Math.floor(g.time / 240) + 1} ·{" "}
+                {g.property === "garage"
+                  ? "GARAGE WORKSHOP"
+                  : "BEDROOM STARTUP"}
               </small>
               <div>
                 <span>
@@ -438,6 +482,7 @@ export default function App() {
             <span className="live-dot" />
             YOUR BEDROOM STUDIO <span>01 — THE BEGINNING</span>
           </div>
+          {!panel && <Tutorial />}
           {!panel && (
             <>
               <aside className="chapter-card">
@@ -456,7 +501,7 @@ export default function App() {
                 <div className="chapter-rule" />
                 <div className="chapter-metrics">
                   <span>
-                    SHIRTS DELIVERED
+                    ORDERS DELIVERED
                     <b>{String(completed(g)).padStart(2, "0")}</b>
                   </span>
                   <span>
@@ -586,9 +631,7 @@ export default function App() {
             <span className="eyebrow">
               {guide ? "YOUR FIRST HEADQUARTERS" : "INDEPENDENT BY DESIGN"}
             </span>
-            <h2>
-              {guide ? "The room that starts it all." : "Streetwear Empire"}
-            </h2>
+            <h2>{guide ? "The room that starts it all." : "Company Tycoon"}</h2>
             {guide ? (
               <>
                 <p>
@@ -596,8 +639,10 @@ export default function App() {
                   and press E.
                 </p>
                 {[
-                  "Design desk · back-left: create and save your first cotton T-shirt.",
-                  "Heat press · back-right: use one blank and $4 ink to produce a piece.",
+                  "Design desk · back-left: create a product for your chosen industry.",
+                  industryOf(g).equipment +
+                    " · back-right: " +
+                    industryOf(g).workflow,
                   "Packing station · front-right: use a mailer, ship for $5, and receive payment on delivery.",
                 ].map((t) => (
                   <p key={t}>{t}</p>
@@ -633,6 +678,7 @@ export default function App() {
           </div>
         </div>
       )}
+      {menuSettings && <MenuPreferences close={() => setMenuSettings(false)} />}
       {companies && (
         <Companies
           close={() => {

@@ -1472,3 +1472,203 @@ b {
   font-size: 12px;
   margin: 10px 0;
 }
+.industry-screen {
+  position: relative;
+  background: var(--paper);
+  border-radius: 8px;
+  padding: 40px;
+  width: 1100px;
+  max-width: 100%;
+  max-height: 95%;
+  overflow: auto;
+}
+.industry-screen h1 {
+  font:
+    42px Georgia,
+    serif;
+  margin: 20px 0 10px;
+  letter-spacing: -1px;
+}
+.industry-screen > p {
+  color: #7b856f;
+  font-size: 12px;
+  margin-bottom: 24px;
+}
+.industry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.industry-card {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #d6ddcc;
+  border-radius: 6px;
+  overflow: hidden;
+  padding: 18px;
+  gap: 12px;
+  background: #eceddf;
+}
+.industry-card h2 {
+  font:
+    25px Georgia,
+    serif;
+}
+.industry-card p {
+  font-size: 12px;
+  min-height: 78px;
+}
+.industry-card small {
+  color: #758069;
+}
+.industry-card > strong {
+  font-size: 11px;
+  margin-top: auto;
+  padding-top: 10px;
+}
+.industry-illustration {
+  height: 120px;
+  position: relative;
+  background: #d4ddbd;
+  border-radius: 3px;
+  padding: 12px;
+}
+.industry-illustration span {
+  font: 8px monospace;
+  letter-spacing: 1px;
+}
+.industry-illustration b {
+  position: absolute;
+  font:
+    90px Georgia,
+    serif;
+  bottom: 0;
+  right: 20px;
+  color: #556c48;
+}
+.industry-mtb .industry-illustration {
+  background: #c3d4d0;
+}
+.industry-haircare .industry-illustration {
+  background: #decdbd;
+}
+.industry-method {
+  font-size: 10px;
+  line-height: 1.8;
+  padding-top: 12px;
+  border-top: 1px solid #d2dac4;
+}
+.future-industries {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.future-industries span {
+  padding: 9px 12px;
+  background: #e4e7d9;
+  border-radius: 3px;
+  font-size: 10px;
+  color: #818a72;
+}
+.tutorial-card {
+  position: absolute;
+  z-index: 18;
+  left: 32px;
+  top: 165px;
+  width: 270px;
+  padding: 20px;
+  background: #f7f5e9f5;
+  border: 1px solid #d4ddc5;
+  box-shadow: 0 5px 25px #273b2922;
+  border-radius: 5px;
+}
+.tutorial-card h2 {
+  font:
+    24px Georgia,
+    serif;
+  margin: 15px 0 10px;
+}
+.tutorial-card p {
+  font-size: 11px;
+  line-height: 1.7;
+}
+.tutorial-card .row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tutorial-card .row button {
+  font-size: 9px;
+  padding: 9px;
+}
+.tutorial-card.compact {
+  top: 165px;
+  min-height: 150px;
+}
+.tutorial-card .progress {
+  margin: 12px 0;
+}
+.tutorial-card small {
+  color: #859174;
+  font-size: 9px;
+}
+.tutorial-card .text-button {
+  margin: 8px 0 0;
+}
+.playing:has(.tutorial-card) .chapter-card {
+  display: none;
+}
+.world-map {
+  width: 100%;
+  height: 290px;
+  border: 1px solid #cbd5bb;
+  border-radius: 4px;
+}
+.world-map [role="button"] {
+  cursor: pointer;
+  outline-offset: 2px;
+}
+.selected-industry {
+  font: 11px monospace;
+  color: #758866 !important;
+  margin-bottom: 15px !important;
+}
+@media (max-width: 800px) {
+  .industry-screen {
+    padding: 25px;
+  }
+  .industry-grid {
+    grid-template-columns: 1fr;
+  }
+  .industry-card p {
+    min-height: 0;
+  }
+  .industry-illustration {
+    height: 80px;
+  }
+  .industry-screen h1 {
+    font-size: 32px;
+  }
+  .tutorial-card {
+    left: 15px;
+    top: 135px;
+    width: 230px;
+  }
+  .tutorial-card h2 {
+    font-size: 22px;
+  }
+}
+.panel-open .world,
+.on-menu .world {
+  pointer-events: none;
+}
+.world-map text {
+  pointer-events: none;
+}
+.workstation button {
+  min-height: 32px;
+}
+.panel-open .world *,
+.on-menu .world * {
+  pointer-events: none !important;
+}

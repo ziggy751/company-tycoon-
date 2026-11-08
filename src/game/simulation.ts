@@ -1,6 +1,19 @@
+import {
+  industryOf,
+  productOf,
+  industryUpgrades,
+  INDUSTRIES,
+  TUTORIAL_TASKS,
+  type TutorialTask,
+  type IndustryId,
+  type ProductKind,
+} from "./industries";
 import { ECONOMY as E, UPGRADES } from "./catalog";
 export type Design = {
   id: string;
+  kind?: ProductKind;
+  rawStock?: number;
+  prototypeApproved?: boolean;
   name: string;
   color: string;
   ink: string;
@@ -23,10 +36,19 @@ export type Entry = {
   time: number;
   label: string;
   amount: number;
-  type: "expense" | "revenue";
+  type: "expense" | "revenue" | "grant";
 };
 export type Game = {
   version: 1;
+  industry?: IndustryId;
+  labels?: number;
+  property?: "home" | "garage";
+  waypoint?: [number, number];
+  onboarding?: {
+    mode: "pending" | "active" | "skipped" | "complete";
+    tasks: TutorialTask[];
+    rewarded: boolean;
+  };
   companyId?: string;
   doorOpen?: boolean;
   lightsOn?: boolean;
@@ -45,7 +67,13 @@ export type Game = {
   reputation: number;
   designs: Design[];
   orders: Order[];
-  jobs: { id: string; designId: string; end: number }[];
+  jobs: {
+    id: string;
+    designId: string;
+    end: number;
+    kind?: "print" | "prototype" | "contract" | "inspect" | "label";
+    quantity?: number;
+  }[];
   posts: {
     id: string;
     time: number;
@@ -67,8 +95,12 @@ export type Game = {
 export type Action =
   | { type: "design"; design: Omit<Design, "id" | "stock"> }
   | { type: "price"; id: string; price: number }
-  | { type: "buy"; item: "blanks" | "packaging"; quantity: number }
+  | { type: "buy"; item: "blanks" | "packaging" | "labels"; quantity: number }
   | { type: "produce"; id: string }
+  | { type: "prototype" | "contract" | "inspect" | "label"; id: string }
+  | { type: "tutorial-start" | "tutorial-skip" }
+  | { type: "tutorial-event"; task: TutorialTask }
+  | { type: "waypoint"; position: [number, number] }
   | { type: "post"; caption: string }
   | { type: "pack" | "ship"; id: string }
   | { type: "upgrade"; id: string }
@@ -104,11 +136,15 @@ export const expenses = (s: Game) =>
 export const completed = (s: Game) =>
   s.orders.filter((o) => o.status === "delivered").length;
 export const capacity = (s: Game) =>
-  s.upgrades.includes("storage") ? 40 : E.capacity;
+  s.property === "garage"
+    ? 60
+    : s.upgrades.includes("storage")
+      ? 40
+      : E.capacity;
 export const occupied = (s: Game) =>
   s.blanks +
-  s.designs.reduce((v, d) => v + d.stock, 0) +
-  s.jobs.length +
+  s.designs.reduce((v, d) => v + d.stock + (d.rawStock || 0), 0) +
+  s.jobs.reduce((n, j) => n + (j.quantity ?? 1), 0) +
   s.orders.filter((o) => o.status === "ordered" || o.status === "packed")
     .length;
 export function newGame(
@@ -117,9 +153,14 @@ export function newGame(
   accent = "#d9ed91",
   aesthetic = "Underground",
   founder = "#a77c62",
+  industry: IndustryId = "streetwear",
 ): Game {
   return {
     version: 1,
+    industry,
+    labels: industry === "haircare" ? 5 : 0,
+    property: "home",
+    onboarding: { mode: "pending", tasks: [], rewarded: false },
     companyId: crypto.randomUUID(),
     doorOpen: false,
     lightsOn: true,
@@ -131,7 +172,7 @@ export function newGame(
     founder,
     time: 0,
     cash: 50000,
-    blanks: 5,
+    blanks: industry === "streetwear" ? 5 : 0,
     packaging: 5,
     followers: 0,
     reputation: 0,
@@ -151,6 +192,33 @@ export function newGame(
     player: [0, 2],
   };
 }
+export function garageReady(s: Game) {
+  const i = industryOf(s);
+  return (
+    revenue(s) >= i.garageRevenue &&
+    completed(s) >= i.garageOrders &&
+    revenue(s) - expenses(s) >= 50000 &&
+    s.reputation >= 15 &&
+    s.upgrades.includes("storage")
+  );
+}
+function task(s: Game, t: TutorialTask) {
+  const o = s.onboarding;
+  if (o?.mode === "active" && !o.tasks.includes(t)) o.tasks.push(t);
+}
+function tutorialReward(s: Game) {
+  const o = s.onboarding;
+  if (
+    o?.mode === "active" &&
+    TUTORIAL_TASKS.every(([t]) => o.tasks.includes(t))
+  ) {
+    o.mode = "complete";
+    if (!o.rewarded) {
+      entry(s, "Tutorial completion grant", 10000, "grant");
+      o.rewarded = true;
+    }
+  }
+}
 function achievements(s: Game) {
   const earned = [
     s.designs.length > 0 && "Independent designer",
@@ -159,7 +227,7 @@ function achievements(s: Game) {
     completed(s) >= 5 && "First five",
     s.followers >= 100 && "A growing audience",
     s.upgrades.length > 0 && "Reinvested",
-    revenue(s) >= 1000000 && "Garage ready",
+    garageReady(s) && "Garage ready",
   ];
   for (const name of earned)
     if (name && !s.achievements.includes(name)) s.achievements.push(name);
@@ -167,6 +235,102 @@ function achievements(s: Game) {
 export function act(state: Game, action: Action): Game {
   const s = clone(state);
   switch (action.type) {
+    case "waypoint":
+      check(action.position.every(Number.isFinite), "Invalid waypoint.");
+      s.waypoint = action.position;
+      break;
+    case "tutorial-start": {
+      const old = s.onboarding;
+      s.onboarding = {
+        mode: "active",
+        tasks:
+          old?.mode === "complete" ||
+          (old?.rewarded &&
+            TUTORIAL_TASKS.every(([t]) => old.tasks.includes(t)))
+            ? []
+            : old?.tasks || [],
+        rewarded: old?.rewarded || false,
+      };
+      s.tutorial = true;
+      break;
+    }
+    case "tutorial-skip":
+      s.onboarding = {
+        mode: "skipped",
+        tasks: s.onboarding?.tasks || [],
+        rewarded: s.onboarding?.rewarded || false,
+      };
+      s.tutorial = false;
+      break;
+    case "tutorial-event":
+      check(
+        TUTORIAL_TASKS.some(([t]) => t === action.task),
+        "Unknown tutorial task.",
+      );
+      task(s, action.task);
+      break;
+    case "prototype":
+    case "contract":
+    case "inspect":
+    case "label": {
+      const d = s.designs.find((d) => d.id === action.id);
+      check(d, "Save a product first.");
+      const industry = industryOf(s).id;
+      const p = productOf(d!);
+      check(!s.jobs.length, "Your workstation is busy.");
+      let quantity = 1,
+        seconds = 6;
+      if (action.type === "prototype") {
+        check(industry === "mtb", "Only MTB designs need this prototype step.");
+        check(!d!.prototypeApproved, "Prototype already approved.");
+        spend(s, "Prototype materials & setup", 1500);
+        seconds = s.upgrades.includes("press") ? 6 : 12;
+        quantity = 0;
+      }
+      if (action.type === "contract") {
+        check(industry !== "streetwear", "Use the heat press for clothing.");
+        check(
+          industry !== "mtb" || d!.prototypeApproved,
+          "Approve a prototype before contracting a batch.",
+        );
+        quantity = s.property === "garage" ? 6 : 3;
+        check(occupied(s) + quantity <= capacity(s), "Storage full.");
+        spend(
+          s,
+          industryOf(s).supplier + " · " + quantity + " " + p.name,
+          quantity * p.unitCost,
+        );
+        seconds = p.seconds;
+        task(s, "materials");
+      }
+      if (action.type === "inspect") {
+        check(industry === "mtb", "Inspection is an MTB workflow.");
+        quantity = d!.rawStock || 0;
+        check(quantity > 0, "Wait for the supplier batch to arrive.");
+        d!.rawStock = 0;
+        seconds = s.upgrades.includes("press") ? 5 : 10;
+      }
+      if (action.type === "label") {
+        check(
+          industry === "haircare",
+          "Use this station for accessory labels.",
+        );
+        check((d!.rawStock || 0) > 0, "Source an accessory batch first.");
+        check((s.labels || 0) > 0, "Buy more paper labels.");
+        d!.rawStock!--;
+        s.labels!--;
+        spend(s, "Label ink & presentation", 150);
+        seconds = s.upgrades.includes("press") ? 3 : 6;
+      }
+      s.jobs.push({
+        id: id(s),
+        designId: action.id,
+        end: s.time + seconds,
+        kind: action.type,
+        quantity,
+      });
+      break;
+    }
     case "door":
       s.doorOpen = !s.doorOpen;
       break;
@@ -180,6 +344,7 @@ export function act(state: Game, action: Action): Game {
       }
       const d = s.designs.find((d) => d.id === action.id);
       check(d, "Design not found.");
+      check(!d!.kind || d!.kind === "shirt", "Only clothing can be equipped.");
       s.wardrobe ??= [];
       if (!s.wardrobe.includes(action.id)) {
         check(d!.stock > 0, "Manufacture a sample first.");
@@ -204,7 +369,20 @@ export function act(state: Game, action: Action): Game {
         s.designs.length < 30,
         "This studio supports up to 30 saved designs.",
       );
-      s.designs.push({ ...d, id: id(s), stock: 0, text: d.text.slice(0, 24) });
+      check(
+        industryOf(s).products.includes(d.kind || "shirt"),
+        "This product does not belong to your industry.",
+      );
+      task(s, "design");
+      task(s, "price");
+      s.designs.push({
+        ...d,
+        rawStock: 0,
+        prototypeApproved: false,
+        id: id(s),
+        stock: 0,
+        text: d.text.slice(0, 24),
+      });
       break;
     }
     case "price":
@@ -218,6 +396,7 @@ export function act(state: Game, action: Action): Game {
         const d = s.designs.find((d) => d.id === action.id);
         check(d, "Design not found.");
         d!.price = action.price;
+        task(s, "price");
       }
       break;
     case "buy": {
@@ -227,6 +406,14 @@ export function act(state: Game, action: Action): Game {
           action.quantity <= 20,
         "Choose 1–20 units.",
       );
+      check(
+        action.item !== "blanks" || industryOf(s).id === "streetwear",
+        "This company sources finished components, not cotton blanks.",
+      );
+      check(
+        action.item !== "labels" || industryOf(s).id === "haircare",
+        "Labels are used by the hair-accessory business.",
+      );
       if (action.item === "blanks")
         check(
           occupied(s) + action.quantity <= capacity(s),
@@ -234,18 +421,30 @@ export function act(state: Game, action: Action): Game {
         );
       else
         check(
-          s.packaging + action.quantity <= 100,
+          (action.item === "labels" ? s.labels || 0 : s.packaging) +
+            action.quantity <=
+            100,
           "Packaging shelf holds 100 mailers.",
         );
       spend(
         s,
         `${action.quantity} ${action.item}`,
-        action.quantity * (action.item === "blanks" ? E.blank : E.packaging),
+        action.quantity *
+          (action.item === "blanks"
+            ? E.blank
+            : action.item === "labels"
+              ? 50
+              : E.packaging),
       );
-      s[action.item] += action.quantity;
+      s[action.item] = (s[action.item] || 0) + action.quantity;
+      task(s, "materials");
       break;
     }
     case "produce":
+      check(
+        industryOf(s).id === "streetwear",
+        "This company does not use a heat press.",
+      );
       check(
         s.designs.some((d) => d.id === action.id),
         "Save a design first.",
@@ -263,7 +462,7 @@ export function act(state: Game, action: Action): Game {
     case "post": {
       check(
         s.designs.some((d) => d.stock > 0),
-        "Produce a shirt before advertising.",
+        "Produce a saleable product before advertising.",
       );
       check(
         s.time - s.lastPost >= E.postCooldown,
@@ -271,6 +470,7 @@ export function act(state: Game, action: Action): Game {
       );
       spend(s, "SocialHub promotion", E.postCost);
       s.lastPost = s.time;
+      task(s, "promote");
       const views = Math.round(
         (65 + s.followers * 0.2) * (s.upgrades.includes("studio") ? 1.5 : 1),
       );
@@ -292,6 +492,7 @@ export function act(state: Game, action: Action): Game {
       check(o?.status === "ordered", "Order has already been packed.");
       check(s.packaging > 0, "Buy packaging from the supplier.");
       s.packaging--;
+      task(s, "pack");
       o!.status = "packed";
       break;
     }
@@ -304,7 +505,20 @@ export function act(state: Game, action: Action): Game {
       break;
     }
     case "upgrade": {
-      const u = UPGRADES.find((u) => u.id === action.id);
+      if (action.id === "garage") {
+        check(s.property !== "garage", "Garage already owned.");
+        check(
+          garageReady(s),
+          "Garage needs revenue, profitability, reputation, fulfilled orders and shelving.",
+        );
+        spend(s, "Garage workshop purchase", industryOf(s).garageCost);
+        s.property = "garage";
+        s.player = [30, -14];
+        break;
+      }
+      const u = industryUpgrades(industryOf(s).id).find(
+        (u) => u.id === action.id,
+      );
       check(u, "Unknown upgrade.");
       check(!s.upgrades.includes(action.id), "Already installed.");
       check(
@@ -328,6 +542,7 @@ export function act(state: Game, action: Action): Game {
       s.slogan = action.slogan.slice(0, 70);
       break;
   }
+  tutorialReward(s);
   achievements(s);
   return s;
 }
@@ -341,13 +556,23 @@ export function tick(state: Game, seconds = 1): Game {
     s.time++;
     for (const j of s.jobs.filter((j) => j.end <= s.time)) {
       const d = s.designs.find((d) => d.id === j.designId);
-      if (d) d.stock++;
+      if (d) {
+        const quantity = j.quantity ?? 1;
+        if (j.kind === "prototype") d.prototypeApproved = true;
+        else if (j.kind === "contract")
+          d.rawStock = (d.rawStock || 0) + quantity;
+        else {
+          d.stock += quantity;
+          task(s, "produce");
+        }
+      }
     }
     s.jobs = s.jobs.filter((j) => j.end > s.time);
     for (const o of s.orders.filter(
       (o) => o.status === "shipping" && o.arrives! <= s.time,
     )) {
       o.status = "delivered";
+      task(s, "deliver");
       entry(s, "Sale · " + o.customer, o.price, "revenue");
       s.reputation = Math.min(100, s.reputation + 1);
     }
@@ -358,10 +583,12 @@ export function tick(state: Game, seconds = 1): Game {
     ) {
       s.lastDemand = s.time;
       const d = s.designs.find(
-        (d) => d.stock > 0 && d.price <= 4900 + s.reputation * 80,
+        (d) =>
+          d.stock > 0 && d.price <= productOf(d).budget + s.reputation * 80,
       );
       if (d) {
         d.stock--;
+        task(s, "order");
         s.demand--;
         s.orders.push({
           id: id(s),
@@ -380,6 +607,7 @@ export function tick(state: Game, seconds = 1): Game {
       }
     }
   }
+  tutorialReward(s);
   achievements(s);
   return s;
 }
@@ -391,13 +619,16 @@ export function objective(s: Game): {
   if (!s.designs.length)
     return {
       title: "Make it yours.",
-      detail: "Create and save your first T-shirt in the Design Studio.",
+      detail:
+        "Create and save your first " +
+        productOf({ kind: industryOf(s).products[0] }).name +
+        " in the Design Studio.",
       panel: "design",
     };
   if (!s.designs.some((d) => d.stock) && !s.orders.length)
     return {
       title: "From idea to object.",
-      detail: "Use the heat press to produce your first shirt.",
+      detail: industryOf(s).workflow,
       panel: "production",
     };
   if (!s.posts.length)
@@ -415,14 +646,14 @@ export function objective(s: Game): {
     };
   if (completed(s) < 5)
     return {
-      title: "Five shirts. A real beginning.",
+      title: "Five sales. A real beginning.",
       detail: `Deliver ${5 - completed(s)} more orders. Reinvest your earnings into materials.`,
       panel: "orders",
     };
   return {
     title: "Build beyond the bedroom.",
     detail:
-      "Improve your workspace. Garage expansion target: $10,000 revenue (future phase).",
+      "Invest in a garage when you meet the financial, quality and fulfilment milestones in Workspace.",
     panel: "upgrades",
   };
 }

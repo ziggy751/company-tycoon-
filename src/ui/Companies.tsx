@@ -1,3 +1,4 @@
+import { industryOf } from "../game/industries";
 import { useEffect, useState } from "react";
 import {
   listCompanies,
@@ -46,7 +47,11 @@ export function Companies({
           <article className="save-slot" key={s.game.companyId}>
             <h3>{s.game.brand}</h3>
             <small>
-              Streetwear · Starter home · {Math.floor(s.game.time / 60)} minutes
+              {industryOf(s.game).name} ·{" "}
+              {s.game.property === "garage"
+                ? "Garage workshop"
+                : "Starter home"}{" "}
+              · {Math.floor(s.game.time / 60)} minutes
             </small>
             <p>
               {money(s.game.cash)} cash · {money(revenue(s.game))} revenue ·{" "}
