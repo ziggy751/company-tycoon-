@@ -1,3 +1,4 @@
+import { Wardrobe } from "./Wardrobe";
 import { useState, useEffect, Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, ContactShadows } from "@react-three/drei";
@@ -28,6 +29,7 @@ import {
 } from "../game/simulation";
 import { loadGame, listSaves, validateSave } from "../game/save";
 export const PANEL_TITLES: Record<string, [string, string]> = {
+  wardrobe: ["YOUR OWN LABEL", "Wardrobe & home"],
   design: ["01 / CREATIVE", "Design studio"],
   production: ["02 / MAKE", "Production"],
   social: ["03 / CONNECT", "SocialHub"],
@@ -727,6 +729,12 @@ export function SettingsPanel() {
       >
         Update identity
       </button>
+      <button
+        className="secondary full"
+        onClick={() => useGame.getState().open("wardrobe")}
+      >
+        Open wardrobe & home controls
+      </button>
       <h3>KEYBOARD</h3>
       <div className="controls-list">
         W A S D <span>Move</span>
@@ -842,7 +850,8 @@ export function SavesPanel() {
                   throw new Error("Save file exceeds 5 MB.");
                 const game = validateSave(JSON.parse(await file.text()));
                 useGame.getState().setGame(game);
-                await useGame.getState().save();
+                if (!(await useGame.getState().save()))
+                  throw new Error("Imported save could not be persisted.");
                 useGame.getState().notify("Save imported.");
               } catch (err) {
                 useGame.getState().notify((err as Error).message);
@@ -879,6 +888,8 @@ function Empty({
 }
 export function PanelContent({ panel }: { panel: string }) {
   switch (panel) {
+    case "wardrobe":
+      return <Wardrobe />;
     case "design":
       return <DesignPanel />;
     case "production":

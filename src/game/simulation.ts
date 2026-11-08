@@ -27,6 +27,11 @@ export type Entry = {
 };
 export type Game = {
   version: 1;
+  companyId?: string;
+  doorOpen?: boolean;
+  lightsOn?: boolean;
+  wardrobe?: string[];
+  equipped?: string;
   brand: string;
   slogan: string;
   accent: string;
@@ -68,6 +73,8 @@ export type Action =
   | { type: "pack" | "ship"; id: string }
   | { type: "upgrade"; id: string }
   | { type: "wall"; color: string }
+  | { type: "door" | "lights" }
+  | { type: "wear"; id: string }
   | { type: "tutorial" }
   | { type: "identity"; brand: string; slogan: string };
 const clone = <T>(s: T): T => structuredClone(s);
@@ -113,6 +120,10 @@ export function newGame(
 ): Game {
   return {
     version: 1,
+    companyId: crypto.randomUUID(),
+    doorOpen: false,
+    lightsOn: true,
+    wardrobe: [],
     brand: brand.trim().slice(0, 28) || "UNTITLED",
     slogan: slogan.slice(0, 70),
     accent,
@@ -156,6 +167,29 @@ function achievements(s: Game) {
 export function act(state: Game, action: Action): Game {
   const s = clone(state);
   switch (action.type) {
+    case "door":
+      s.doorOpen = !s.doorOpen;
+      break;
+    case "lights":
+      s.lightsOn = s.lightsOn === false;
+      break;
+    case "wear": {
+      if (!action.id) {
+        s.equipped = undefined;
+        break;
+      }
+      const d = s.designs.find((d) => d.id === action.id);
+      check(d, "Design not found.");
+      s.wardrobe ??= [];
+      if (!s.wardrobe.includes(action.id)) {
+        check(d!.stock > 0, "Manufacture a sample first.");
+        d!.stock--;
+        s.wardrobe.push(action.id);
+      }
+      s.equipped = action.id;
+      break;
+    }
+
     case "design": {
       const d = action.design;
       check(

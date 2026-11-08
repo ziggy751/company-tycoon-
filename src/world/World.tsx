@@ -8,6 +8,9 @@ import {
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import * as THREE from "three";
 import { useGame } from "../game/store";
+import { surface } from "./materials";
+import { movePlayer } from "./navigation";
+import { Neighbourhood } from "./Neighbourhood";
 import { Garment } from "./Garment";
 const wood = "#84654a",
   steel = "#303833";
@@ -33,7 +36,12 @@ function Box({
       receiveShadow
       {...props}
     >
-      <meshStandardMaterial color={c} roughness={0.75} />
+      <meshStandardMaterial
+        color={c}
+        {...surface(c === wood ? "timber" : "plaster")}
+        bumpScale={0.018}
+        roughness={0.8}
+      />
     </RoundedBox>
   );
 }
@@ -116,7 +124,10 @@ function Founder() {
   const legs = useRef<THREE.Group>(null);
   const keys = useRef(new Set<string>());
   const walk = useRef(0);
-  const { camera } = useThree();
+  const { camera, controls } = useThree();
+  const outfit = useGame((s) =>
+    s.game!.designs.find((d) => d.id === s.game!.equipped),
+  );
   const settings = useGame((s) => s.settings);
   const position = useRef(
     new THREE.Vector3(
@@ -127,6 +138,12 @@ function Founder() {
       ] as [number, number, number]),
     ),
   );
+  useEffect(() => {
+    const p = position.current;
+    camera.position.set(p.x + 10, 13, p.z + 12);
+    const orbit = controls as unknown as { target: THREE.Vector3 } | null;
+    orbit?.target.set(p.x, 0.6, p.z - 2);
+  }, [camera, controls]);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (
@@ -141,13 +158,16 @@ function Founder() {
         const p = position.current;
         const stations: [number, number, string][] = [
           [-1.6, -2, "design"],
+          [-4.2, 8, "wardrobe"],
+          [0, 3, "door"],
           [3.3, -1.6, "production"],
           [3.5, 1.4, "orders"],
         ];
         const near = stations.find(
           ([x, z]) => Math.hypot(p.x - x, p.z - z) < 2,
         );
-        if (near) useGame.getState().open(near[2]);
+        if (near?.[2] === "door") useGame.getState().dispatch({ type: "door" });
+        else if (near) useGame.getState().open(near[2]);
         else
           useGame
             .getState()
@@ -175,18 +195,20 @@ function Founder() {
     const moving = !!(dx || dz);
     if (moving) {
       const n = Math.hypot(dx, dz);
-      const speed = (k.has("ShiftLeft") ? 3.6 : 2.1) * Math.min(delta, 0.05);
+      const speed = (k.has("ShiftLeft") ? 3.6 : 2.1) * Math.min(delta, 1);
       dx = (dx / n) * speed;
       dz = (dz / n) * speed;
       const p = position.current;
-      const nx = THREE.MathUtils.clamp(p.x + dx, -4.3, 4.3),
-        nz = THREE.MathUtils.clamp(p.z + dz, -3.2, 3.4);
-      const blocked = (x: number, z: number) =>
-        (z < -1.55 && (x < -0.2 || x > 2.3)) ||
-        (x < -2.2 && z < 1.5) ||
-        (x > 2.6 && z > 1.3);
-      if (!blocked(nx, p.z)) p.x = nx;
-      if (!blocked(p.x, nz)) p.z = nz;
+      const previous = p.clone();
+      const next = movePlayer([p.x, p.z], dx, dz, !!st.game?.doorOpen);
+      p.x = next[0];
+      p.z = next[1];
+      if (!settings.firstPerson) {
+        const offset = p.clone().sub(previous);
+        camera.position.add(offset);
+        const orbit = controls as unknown as { target: THREE.Vector3 } | null;
+        orbit?.target.add(offset);
+      }
       ref.current.rotation.y = Math.atan2(dx, dz);
       walk.current += delta * 9;
       if (st.game) st.game.player = [p.x, p.z];
@@ -230,10 +252,20 @@ function Founder() {
           </group>
         ))}
       </group>
-      <mesh position={[0, 1, 0]} castShadow>
-        <capsuleGeometry args={[0.24, 0.37, 6, 12]} />
-        <meshStandardMaterial color="#394d40" />
-      </mesh>
+      {outfit ? (
+        <group position={[0, 1.1, 0]}>
+          <Garment design={outfit} scale={0.44} />
+        </group>
+      ) : (
+        <mesh position={[0, 1, 0]} castShadow>
+          <capsuleGeometry args={[0.24, 0.37, 6, 12]} />
+          <meshStandardMaterial
+            color="#394d40"
+            {...surface("cotton")}
+            bumpScale={0.008}
+          />
+        </mesh>
+      )}
       {[-1, 1].map((x) => (
         <mesh
           key={x}
@@ -242,7 +274,11 @@ function Founder() {
           castShadow
         >
           <capsuleGeometry args={[0.09, 0.4, 4, 8]} />
-          <meshStandardMaterial color="#394d40" />
+          <meshStandardMaterial
+            color={outfit?.color || "#394d40"}
+            {...surface("cotton")}
+            bumpScale={0.008}
+          />
         </mesh>
       ))}
       <mesh position={[0, 1.52, 0]} castShadow>
@@ -376,16 +412,19 @@ function StudioDetails() {
 
 function Room() {
   const game = useGame((s) => s.game)!;
+  const night = game.time % 240 > 170;
   const open = useGame((s) => s.open);
   return (
     <>
       <color attach="background" args={["#c4c7bd"]} />
       <fog attach="fog" args={["#c4c7bd", 28, 60]} />
-      <ambientLight intensity={0.7} />
-      <hemisphereLight args={["#f4f1d8", "#686958", 1.5]} />
+      <ambientLight intensity={night ? 0.16 : 0.35} />
+      <hemisphereLight
+        args={[night ? "#7a8daf" : "#f4f1d8", "#686958", night ? 0.3 : 0.8]}
+      />
       <directionalLight
         position={[-3, 9, 4]}
-        intensity={3.3}
+        intensity={night ? 0.2 : 2.5}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-8}
@@ -484,16 +523,27 @@ function Room() {
       <Label at={[3.6, 1.85, 2.3]} onClick={() => open("orders")}>
         Packing station
       </Label>
+      <Neighbourhood />
+      {game.lightsOn !== false && (
+        <pointLight
+          position={[0, 3, 1]}
+          intensity={night ? 18 : 5}
+          color="#ffe2b5"
+          distance={12}
+        />
+      )}
       <StudioDetails />
-      <Founder />
-      <ContactShadows
-        position={[0, 0.02, 0]}
-        opacity={0.28}
-        scale={16}
-        blur={2}
-        far={4}
-        resolution={256}
-      />
+      <Founder key={game.companyId} />
+      {useGame.getState().settings.quality === "high" && (
+        <ContactShadows
+          position={[0, 0.02, 0]}
+          opacity={0.28}
+          scale={16}
+          blur={2}
+          far={4}
+          resolution={256}
+        />
+      )}
     </>
   );
 }
@@ -511,7 +561,7 @@ export function World() {
         <Canvas
           shadows={settings.quality === "high"}
           dpr={settings.quality === "high" ? [1, 1.75] : 1}
-          camera={{ position: [10, 9.5, 12], fov: 43 }}
+          camera={{ position: [10, 13, 14], fov: 43 }}
           gl={{
             antialias: settings.quality === "high",
             powerPreference: "high-performance",

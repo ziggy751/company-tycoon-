@@ -57,3 +57,7 @@ Current phase: **Phase 1 — playable bedroom vertical slice**.
 - `npm run build`: strict TypeScript and Vite production build passed. Vite reports a large initial Three.js bundle (~1.2 MB uncompressed, ~340 KB gzip); code splitting remains a performance follow-up.
 - `npm run test:browser`: 3 Chromium tests passed. Full first-sale/upgrade/refresh flow, 390px mobile layout, manual slots, export/import and corrupt-file rejection were exercised. The main gameplay run captured no uncaught browser errors.
 - Browser tests used system Chromium with software WebGL, not Safari or a physical MacBook.
+
+## Company Tycoon overhaul
+
+See OVERHAUL_PROGRESS.md for the latest changes and remaining requirements. The new multi-company registry supersedes the former single-autosave limitation. Assets remain procedural, and streetwear remains the sole playable industry.

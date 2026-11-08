@@ -20,7 +20,7 @@ type Store = {
   open: (panel: string | null) => void;
   dispatch: (a: Action) => boolean;
   step: () => void;
-  save: (slot?: string) => Promise<void>;
+  save: (slot?: string) => Promise<boolean>;
   notify: (s: string) => void;
   configure: (s: Partial<Settings>) => void;
 };
@@ -39,7 +39,12 @@ export const useGame = create<Store>((set, get) => ({
     firstPerson: false,
     invert: false,
   },
-  setGame: (g) => set({ game: g, panel: null, paused: false }),
+  setGame: (g) =>
+    set({
+      game: { ...g, companyId: g.companyId || crypto.randomUUID() },
+      panel: null,
+      paused: false,
+    }),
   open: (panel) => set({ panel }),
   notify: (notice) => set({ notice }),
   configure: (s) => set({ settings: { ...get().settings, ...s } }),
@@ -64,17 +69,19 @@ export const useGame = create<Store>((set, get) => ({
   },
   save: async (slot = "autosave") => {
     const g = get().game;
-    if (!g) return;
+    if (!g) return false;
     const snapshot = structuredClone(g);
     saveQueue = saveQueue.catch(() => {}).then(() => saveGame(slot, snapshot));
     try {
       await saveQueue;
       set({ saveStatus: "Saved locally" });
+      return true;
     } catch (e) {
       set({
         saveStatus: "Save failed",
         notice: "Could not save: " + (e as Error).message,
       });
+      return false;
     }
   },
 }));

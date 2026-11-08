@@ -1,3 +1,4 @@
+import { Companies } from "./ui/Companies";
 import { useEffect, useState, Component, type ReactNode } from "react";
 import {
   ArrowUpRight,
@@ -70,6 +71,7 @@ function sound() {
 }
 export default function App() {
   const [screen, setScreen] = useState<"menu" | "create" | "game">("menu");
+  const [companies, setCompanies] = useState(false);
   const [available, setAvailable] = useState(false),
     [credits, setCredits] = useState(false),
     [guide, setGuide] = useState(false);
@@ -157,6 +159,13 @@ export default function App() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [screen]);
+  const saveAndExit = async () => {
+    useGame.setState({ paused: true });
+    if (!(await useGame.getState().save())) return;
+    setAvailable(true);
+    open(null);
+    setScreen("menu");
+  };
   const resume = async () => {
     try {
       const s = await loadGame("autosave");
@@ -171,7 +180,7 @@ export default function App() {
   if (!g)
     return (
       <div className="loading">
-        STREETWEAR EMPIRE<small>Opening the studio…</small>
+        COMPANY TYCOON<small>Opening the studio…</small>
       </div>
     );
   const mission = objective(g),
@@ -194,9 +203,9 @@ export default function App() {
         <div className="menu-screen">
           <header className="menu-header">
             <div className="wordmark">
-              <span className="mark">se.</span> STREETWEAR EMPIRE
+              <span className="mark">se.</span> COMPANY TYCOON
             </div>
-            <span className="edition">THE BEDROOM CHAPTER / V.01</span>
+            <span className="edition">HOME & NEIGHBOURHOOD / V.02</span>
           </header>
           <main className="menu-main">
             <div className="eyebrow">
@@ -222,14 +231,7 @@ export default function App() {
               <button disabled={!available} onClick={resume}>
                 Continue <ArrowRight size={14} />
               </button>
-              <button
-                onClick={() => {
-                  setScreen("game");
-                  open("saves");
-                }}
-              >
-                Load game
-              </button>
+              <button onClick={() => setCompanies(true)}>My Companies</button>
               <button
                 onClick={async () => {
                   try {
@@ -292,8 +294,8 @@ export default function App() {
             <p>A brand is a point of view. What’s yours?</p>
             {available && (
               <p className="warning">
-                Starting a new story replaces the autosave. Manual slots remain
-                available.
+                Existing companies stay safe. Each new company gets its own
+                autosave and manual slots.
               </p>
             )}
             <label>
@@ -368,17 +370,12 @@ export default function App() {
           <header className="hud">
             <button
               className="brand-home"
-              aria-label="Save and return to main menu"
-              onClick={async () => {
-                await useGame.getState().save();
-                setAvailable(true);
-                open(null);
-                setScreen("menu");
-              }}
+              aria-label="Save & return to menu"
+              onClick={saveAndExit}
             >
               <span className="mark">se.</span>
               <div>
-                <b>STREETWEAR EMPIRE</b>
+                <b>COMPANY TYCOON</b>
                 <small>{g.brand} / BEDROOM STUDIO</small>
               </div>
             </button>
@@ -562,6 +559,11 @@ export default function App() {
               <div className="panel-body">
                 <Boundary>
                   <PanelContent key={panel} panel={panel} />
+                  {panel === "settings" && (
+                    <button className="primary full" onClick={saveAndExit}>
+                      Save & return to menu
+                    </button>
+                  )}
                 </Boundary>
               </div>
             </aside>
@@ -630,6 +632,23 @@ export default function App() {
             )}
           </div>
         </div>
+      )}
+      {companies && (
+        <Companies
+          close={() => {
+            setCompanies(false);
+            void loadGame("autosave")
+              .then((s) => setAvailable(!!s))
+              .catch((e) => useGame.getState().notify(e.message));
+          }}
+          play={async (save) => {
+            useGame.getState().setGame(save.game);
+            if (!(await useGame.getState().save()))
+              throw new Error("Could not activate company.");
+            setCompanies(false);
+            setScreen("game");
+          }}
+        />
       )}
       {notice && (
         <div className="toast" role="status">

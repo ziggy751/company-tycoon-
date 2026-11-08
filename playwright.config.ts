@@ -15,6 +15,12 @@ export default defineConfig({
       ],
     },
   },
-  webServer: { command: "npm run dev", port: 5173, reuseExistingServer: true },
+  webServer: {
+    command: process.env.TEST_PRODUCTION
+      ? "npm run preview -- --port 5173"
+      : "npm run dev",
+    port: 5173,
+    reuseExistingServer: true,
+  },
   reporter: "list",
 });

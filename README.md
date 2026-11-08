@@ -52,3 +52,7 @@ Choose this repository, build command `npm run build`, output directory `dist`, 
 - `tests/`: browser gameplay
 
 See GAME_PROGRESS.md, GAME_DESIGN.md and BALANCING.md for scope and extension points. Procedural models are original temporary assets, not final realistic art. Dependency licences remain with their authors.
+
+## Company Tycoon update
+
+The latest increment adds a grounded home/neighbourhood, walkable entrance, usable door, day/night and interior lights, wardrobe samples, and independent companies. Use **My Companies** on the main menu to switch businesses. Opening the wardrobe requires a manufactured sample to wear your design; that piece moves out of saleable stock. Existing IndexedDB saves migrate without deleting the originals. See OVERHAUL_PROGRESS.md for exact scope and unfinished roadmap.

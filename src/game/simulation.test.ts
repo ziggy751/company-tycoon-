@@ -188,3 +188,25 @@ describe("bedroom simulation", () => {
     expect(validateSave(g)).toEqual(g);
   });
 });
+
+describe("owned clothing samples", () => {
+  it("moves exactly one real shirt into a persistent wardrobe and never duplicates stock", () => {
+    let g = produced();
+    const id = g.designs[0].id;
+    g = act(g, { type: "wear", id });
+    expect(g.designs[0].stock).toBe(0);
+    expect(g.wardrobe).toEqual([id]);
+    expect(g.equipped).toBe(id);
+    g = act(g, { type: "wear", id: "" });
+    g = act(g, { type: "wear", id });
+    expect(g.designs[0].stock).toBe(0);
+    expect(validateSave(JSON.parse(JSON.stringify(g))).equipped).toBe(id);
+  });
+  it("rejects samples without inventory and saves home controls", () => {
+    expect(() => act(designed(), { type: "wear", id: "1" })).toThrow("sample");
+    let g = newGame();
+    g = act(act(g, { type: "door" }), { type: "lights" });
+    expect(validateSave(g).doorOpen).toBe(true);
+    expect(g.lightsOn).toBe(false);
+  });
+});

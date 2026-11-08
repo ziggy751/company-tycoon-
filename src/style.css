@@ -1446,3 +1446,29 @@ b {
     margin: 20px 0;
   }
 }
+.company-list {
+  width: 740px;
+}
+.company-list h2 {
+  margin: 20px 0;
+}
+.company-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.company-actions .text-button {
+  margin: 0;
+  padding: 10px;
+}
+.company-list article h3 {
+  font:
+    22px Georgia,
+    serif;
+  margin: 12px 0;
+}
+.company-list article p {
+  font-size: 12px;
+  margin: 10px 0;
+}
