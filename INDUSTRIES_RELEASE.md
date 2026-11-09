@@ -1,3 +1,5 @@
+> Historical first multi-industry release. The current 25-product catalogue, computer UI and physical delivery changes are documented in [DESKTOP_RELEASE.md](DESKTOP_RELEASE.md).
+
 # Company Tycoon — multi-industry delivery report
 
 ## Delivered systems

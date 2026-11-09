@@ -1,3 +1,5 @@
+import { Computer } from "./ui/Computer";
+import { stations } from "./game/interactions";
 import { MenuPreferences } from "./ui/MenuPreferences";
 import { industryOf, type IndustryId } from "./game/industries";
 import { IndustrySelect } from "./ui/IndustrySelect";
@@ -8,37 +10,20 @@ import { useEffect, useState, Component, type ReactNode } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
-  Shirt,
-  Hammer,
-  Smartphone,
-  Package,
-  Boxes,
-  ChartNoAxesCombined,
-  Armchair,
   Settings,
   X,
   Pause,
   Play,
-  ChevronsRight,
   Save,
   Leaf,
   MapPin,
 } from "lucide-react";
 import { World } from "./world/World";
 import { useGame } from "./game/store";
-import { newGame, objective, completed, revenue } from "./game/simulation";
+import { newGame } from "./game/simulation";
 import { loadGame } from "./game/save";
 import { AESTHETICS, money } from "./game/catalog";
 import { PanelContent, PANEL_TITLES } from "./ui/Panels";
-const NAV = [
-  { id: "design", icon: Shirt, label: "Design" },
-  { id: "production", icon: Hammer, label: "Produce" },
-  { id: "social", icon: Smartphone, label: "SocialHub" },
-  { id: "orders", icon: Package, label: "Orders" },
-  { id: "inventory", icon: Boxes, label: "Supplies" },
-  { id: "finances", icon: ChartNoAxesCombined, label: "Finances" },
-  { id: "upgrades", icon: Armchair, label: "Workspace" },
-];
 class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
@@ -47,8 +32,8 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   render() {
     return this.state.failed ? (
       <div className="world-fallback">
-        3D could not start. Enable WebGL in your browser. Business tools remain
-        available.
+        This view could not load. Close it and retry. For 3D problems, choose
+        Low quality in Settings and reload.
       </div>
     ) : (
       this.props.children
@@ -95,7 +80,8 @@ export default function App() {
     status = useGame((s) => s.saveStatus),
     paused = useGame((s) => s.paused),
     speed = useGame((s) => s.speed),
-    open = useGame((s) => s.open);
+    open = useGame((s) => s.open),
+    interaction = useGame((s) => s.interaction);
   useEffect(() => {
     useGame.getState().setGame(newGame());
     loadGame("autosave")
@@ -106,7 +92,7 @@ export default function App() {
       if (s) {
         const p = JSON.parse(s);
         if (
-          ["high", "low"].includes(p.quality) &&
+          ["high", "low", "medium", "ultra"].includes(p.quality) &&
           Number.isFinite(p.volume) &&
           Number.isFinite(p.sensitivity)
         )
@@ -168,14 +154,21 @@ export default function App() {
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       if (s.panel && e.code !== "Escape") return;
       if (e.code === "Escape") s.open(s.panel ? null : "settings");
-      if (e.code === s.settings.keys.phone) {
+      const application =
+        e.code === s.settings.keys.phone
+          ? "social"
+          : e.code === s.settings.keys.inventory
+            ? "inventory"
+            : e.code === s.settings.keys.workspace
+              ? "upgrades"
+              : null;
+      if (application) {
         e.preventDefault();
-        s.open(s.panel === "social" ? null : "social");
+        if (s.interaction === "computer") {
+          s.interact("computer");
+          useGame.setState({ desktopApp: application });
+        } else s.notify("Walk to a computer to open this application.");
       }
-      if (e.code === s.settings.keys.inventory)
-        s.open(s.panel === "inventory" ? null : "inventory");
-      if (e.code === s.settings.keys.workspace)
-        s.open(s.panel === "upgrades" ? null : "upgrades");
       if (e.code === s.settings.keys.map)
         s.open(s.panel === "map" ? null : "map");
     };
@@ -183,8 +176,12 @@ export default function App() {
     return () => window.removeEventListener("keydown", key);
   }, [screen]);
   const saveAndExit = async () => {
+    const previouslyPaused = useGame.getState().paused;
     useGame.setState({ paused: true });
-    if (!(await useGame.getState().save())) return;
+    if (!(await useGame.getState().save())) {
+      useGame.setState({ paused: previouslyPaused });
+      return;
+    }
     setAvailable(true);
     open(null);
     setScreen("menu");
@@ -209,10 +206,6 @@ export default function App() {
         COMPANY TYCOON<small>Opening the studio…</small>
       </div>
     );
-  const mission = objective(g),
-    pending = g.orders.filter(
-      (o) => o.status === "ordered" || o.status === "packed",
-    ).length;
   return (
     <div
       className={`app ${screen === "game" ? "playing" : "on-menu"} ${panel ? "panel-open" : ""}`}
@@ -403,73 +396,46 @@ export default function App() {
       )}
       {screen === "game" && (
         <>
-          <header className="hud">
+          <header className="hud minimal-hud">
             <button
               className="brand-home"
+              data-world-key={`${g.companyId || "legacy"}:${useGame.getState().worldEpoch}`}
               aria-label="Save & return to menu"
               onClick={saveAndExit}
             >
-              <span className="mark">se.</span>
+              <span className="mark">ct.</span>
               <div>
-                <b>COMPANY TYCOON</b>
+                <b>{g.brand}</b>
                 <small>
-                  {g.brand} /{" "}
                   {g.property === "garage"
                     ? "GARAGE WORKSHOP"
                     : "BEDROOM STUDIO"}
                 </small>
               </div>
             </button>
-            <div className="hud-stats">
-              <button onClick={() => open("finances")}>
-                <small>AVAILABLE CASH</small>
-                <strong>{money(g.cash)}</strong>
-              </button>
-              <button onClick={() => open("social")}>
-                <small>FOLLOWERS</small>
-                <strong>
-                  {g.followers.toLocaleString()}
-                  <span> people</span>
-                </strong>
-              </button>
-              <button onClick={() => open("upgrades")}>
-                <small>REPUTATION</small>
-                <strong>
-                  {g.reputation}
-                  <span> / 100</span>
-                </strong>
-              </button>
-            </div>
+            <strong className="cash-indicator">{money(g.cash)}</strong>
             <div className="clock">
-              <small>
-                DAY {Math.floor(g.time / 240) + 1} ·{" "}
-                {g.property === "garage"
-                  ? "GARAGE WORKSHOP"
-                  : "BEDROOM STARTUP"}
-              </small>
-              <div>
-                <span>
-                  {String(8 + Math.floor((g.time % 240) / 15)).padStart(2, "0")}
-                  :{String((g.time % 15) * 4).padStart(2, "0")}
-                </span>
-                <button
-                  aria-label={paused ? "Resume simulation" : "Pause simulation"}
-                  onClick={() => useGame.setState({ paused: !paused })}
-                >
-                  {paused ? <Play size={14} /> : <Pause size={14} />}
-                </button>
-                <button
-                  aria-label="Toggle simulation speed"
-                  className={speed === 3 ? "selected" : ""}
-                  onClick={() =>
-                    useGame.setState({ speed: speed === 1 ? 3 : 1 })
-                  }
-                >
-                  <ChevronsRight size={16} />
-                  <small>{speed}×</small>
-                </button>
-              </div>
+              <span>DAY {Math.floor(g.time / 240) + 1}</span>
+              <button
+                aria-label={paused ? "Resume simulation" : "Pause simulation"}
+                onClick={() => useGame.setState({ paused: !paused })}
+              >
+                {paused ? <Play size={14} /> : <Pause size={14} />}
+              </button>
+              <button
+                aria-label="Toggle simulation speed"
+                onClick={() => useGame.setState({ speed: speed === 1 ? 3 : 1 })}
+              >
+                {speed}×
+              </button>
             </div>
+            <button
+              className="icon-button"
+              aria-label="Open world map"
+              onClick={() => open("map")}
+            >
+              <MapPin size={18} />
+            </button>
             <button
               className="icon-button"
               aria-label="Open settings"
@@ -478,112 +444,31 @@ export default function App() {
               <Settings size={18} />
             </button>
           </header>
-          <div className="scene-caption">
-            <span className="live-dot" />
-            YOUR BEDROOM STUDIO <span>01 — THE BEGINNING</span>
-          </div>
           {!panel && <Tutorial />}
-          {!panel && (
-            <>
-              <aside className="chapter-card">
-                <div className="eyebrow">
-                  THE INDEPENDENT JOURNAL <span>01</span>
-                </div>
-                <h2>
-                  A small start.
-                  <br />A real business.
-                </h2>
-                <p>
-                  Every piece you make is a step
-                  <br />
-                  toward something of your own.
-                </p>
-                <div className="chapter-rule" />
-                <div className="chapter-metrics">
-                  <span>
-                    ORDERS DELIVERED
-                    <b>{String(completed(g)).padStart(2, "0")}</b>
-                  </span>
-                  <span>
-                    TOTAL REVENUE<b>{money(revenue(g))}</b>
-                  </span>
-                </div>
-                <div className="chapter-progress">
-                  <div className="progress">
-                    <i
-                      style={{
-                        width: `${Math.min(100, (completed(g) / 5) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <small>
-                    THE FIRST FIVE / {Math.min(5, completed(g))} OF 5
-                  </small>
-                </div>
-              </aside>
-              <button className="room-guide" onClick={() => setGuide(true)}>
-                <MapPin size={14} />
-                Bedroom studio <span>M</span>
-              </button>
-            </>
-          )}
-          {g.tutorial && !panel && (
-            <section className="mission">
-              <div className="mission-icon">
-                <ArrowUpRight size={24} />
-              </div>
-              <div className="grow">
-                <span className="eyebrow">YOUR NEXT MOVE</span>
-                <h3>{mission.title}</h3>
-                <p>{mission.detail}</p>
-              </div>
-              <button
-                className="mission-go"
-                onClick={() => open(mission.panel)}
-                aria-label="Open current objective"
-              >
-                <ArrowRight size={20} />
-              </button>
-              <button
-                className="mission-skip"
-                aria-label="Hide tutorial"
-                onClick={() =>
-                  useGame.getState().dispatch({ type: "tutorial" })
-                }
-              >
-                <X size={12} />
-              </button>
-            </section>
-          )}
-          <nav className="dock" aria-label="Workstations">
-            {NAV.map((n) => (
-              <button
-                key={n.id}
-                className={panel === n.id ? "active" : ""}
-                onClick={() => open(panel === n.id ? null : n.id)}
-              >
-                <n.icon size={19} />
-                <span>{n.label}</span>
-                {n.id === "orders" && pending > 0 && <i>{pending}</i>}
-              </button>
-            ))}
-          </nav>
-          <footer className="statusbar">
-            <span>
-              <i className="live-dot" />
-              {status}
-            </span>
-            <span>WASD move · Drag to orbit · E interact · Tab phone</span>
+          {!panel && interaction && (
             <button
-              onClick={() => {
-                void useGame.getState().save();
-              }}
+              className="interaction-prompt"
+              onClick={() => useGame.getState().interact()}
             >
+              <kbd>
+                {useGame.getState().settings.keys.interact.replace("Key", "")}
+              </kbd>
+              {stations(g).find((s) => s.id === interaction)?.label}
+            </button>
+          )}
+          <footer className="statusbar minimal-status">
+            <span aria-live="polite">{status}</span>
+            <button onClick={() => void useGame.getState().save()}>
               <Save size={12} />
-              Save journal
+              Save
             </button>
           </footer>
-          {panel && (
+          {panel === "computer" && (
+            <Boundary>
+              <Computer saveAndExit={saveAndExit} />
+            </Boundary>
+          )}
+          {panel && panel !== "computer" && (
             <aside
               className="workstation"
               aria-label={PANEL_TITLES[panel]?.[1]}
@@ -606,7 +491,7 @@ export default function App() {
                   <PanelContent key={panel} panel={panel} />
                   {panel === "settings" && (
                     <button className="primary full" onClick={saveAndExit}>
-                      Save & return to menu
+                      Save & Exit
                     </button>
                   )}
                 </Boundary>
@@ -635,8 +520,8 @@ export default function App() {
             {guide ? (
               <>
                 <p>
-                  Click a room label, use the dock, or walk near a workstation
-                  and press E.
+                  Walk near the computer or a physical workstation and press
+                  your interaction key. Use the world map to plan a route.
                 </p>
                 {[
                   "Design desk · back-left: create a product for your chosen industry.",
@@ -660,9 +545,9 @@ export default function App() {
             ) : (
               <>
                 <p>
-                  Original procedural geometry and generated typography. System
-                  fonts. Synthesised UI audio. No third-party art or music
-                  assets.
+                  Original procedural geometry and generated typography, plus a
+                  CC0 authored chair by Eric Chadwick / Wayfair. See ASSETS.md
+                  for attribution. System fonts and synthesised UI audio.
                 </p>
                 <p>
                   Built with React, Three.js, React Three Fiber, Drei, Zustand

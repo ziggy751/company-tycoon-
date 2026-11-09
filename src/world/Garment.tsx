@@ -4,9 +4,11 @@ import type { Design } from "../game/simulation";
 export function Garment({
   design,
   scale = 1,
+  longSleeves = false,
 }: {
   design: Pick<Design, "color" | "ink" | "text" | "fit" | "graphic">;
   scale?: number;
+  longSleeves?: boolean;
 }) {
   const geometry = useMemo(() => {
     const s = new THREE.Shape();
@@ -16,14 +18,14 @@ export function Garment({
     s.moveTo(-0.18, 0.7);
     s.quadraticCurveTo(0, 0.54, 0.18, 0.7);
     s.lineTo(w, 0.61);
-    s.lineTo(w + 0.34, 0.15);
-    s.lineTo(w + 0.12, 0.02);
+    s.lineTo(w + (longSleeves ? 0.45 : 0.34), longSleeves ? -0.55 : 0.15);
+    s.lineTo(w + 0.12, longSleeves ? -0.65 : 0.02);
     s.lineTo(w, 0.29);
     s.lineTo(w, -h);
     s.quadraticCurveTo(0, -h - 0.04, -w, -h);
     s.lineTo(-w, 0.29);
-    s.lineTo(-w - 0.12, 0.02);
-    s.lineTo(-w - 0.34, 0.15);
+    s.lineTo(-w - 0.12, longSleeves ? -0.65 : 0.02);
+    s.lineTo(-w - (longSleeves ? 0.45 : 0.34), longSleeves ? -0.55 : 0.15);
     s.lineTo(-w, 0.61);
     s.closePath();
     const g = new THREE.ExtrudeGeometry(s, {
@@ -36,7 +38,7 @@ export function Garment({
     });
     g.computeVertexNormals();
     return g;
-  }, [design.fit]);
+  }, [design.fit, longSleeves]);
   const texture = useMemo(() => {
     const c = document.createElement("canvas");
     c.width = 512;

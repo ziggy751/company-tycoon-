@@ -1,17 +1,14 @@
+import { ComputerHardware } from "./ComputerHardware";
 import { PointerRecovery } from "./PointerRecovery";
 import { LoadedChair } from "./LoadedChair";
 import { industryOf } from "../game/industries";
+import { visibleStation } from "../game/interactions";
 import { IndustryEquipment } from "./IndustryEquipment";
 import { Garage } from "./Garage";
 import { editing } from "../game/controls";
 import { CameraCollision } from "./CameraCollision";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import {
-  OrbitControls,
-  RoundedBox,
-  Html,
-  ContactShadows,
-} from "@react-three/drei";
+import { OrbitControls, RoundedBox, ContactShadows } from "@react-three/drei";
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import * as THREE from "three";
 import { useGame } from "../game/store";
@@ -33,6 +30,13 @@ function Box({
   rotation?: [number, number, number];
   onClick?: () => void;
 }) {
+  if (useGame.getState().settings.quality === "low")
+    return (
+      <mesh position={p} userData={{ cameraSolid: true }} {...props}>
+        <boxGeometry args={s} />
+        <meshLambertMaterial color={c} />
+      </mesh>
+    );
   return (
     <RoundedBox
       position={p}
@@ -51,24 +55,6 @@ function Box({
         roughness={0.8}
       />
     </RoundedBox>
-  );
-}
-function Label({
-  at,
-  children,
-  onClick,
-}: {
-  at: [number, number, number];
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <Html position={at} center distanceFactor={13} zIndexRange={[10, 0]}>
-      <button className="world-label" onClick={onClick}>
-        {children}
-        <span>↗</span>
-      </button>
-    </Html>
   );
 }
 function Legs({
@@ -102,7 +88,9 @@ function Legs({
 function Press() {
   const moving = useRef<THREE.Group>(null);
   const busy = useGame(
-    (s) => !!s.game?.jobs.length && s.game.property !== "garage",
+    (s) =>
+      !!s.game?.jobs.some((j) => !j.kind || j.kind === "print") &&
+      s.game.property !== "garage",
   );
   const invalidate = useThree((s) => s.invalidate);
   const paused = useGame(
@@ -136,11 +124,15 @@ function Press() {
     </group>
   );
 }
+const worldContext = (s: ReturnType<typeof useGame.getState>) =>
+  `${s.game?.companyId}:${s.game?.property}:${s.worldEpoch}`;
 function Founder() {
+  const mountedContext = useRef(worldContext(useGame.getState()));
   const ref = useRef<THREE.Group>(null);
   const legs = useRef<THREE.Group>(null);
   const keys = useRef(new Set<string>());
   const walk = useRef(0);
+  const pace = useRef(0);
   const travelled = useRef(0);
   const lastMotion = useRef(performance.now());
   const settings = useGame((s) => s.settings);
@@ -150,6 +142,7 @@ function Founder() {
       useGame.subscribe((state, previous) => {
         if (
           (state.panel !== previous.panel && state.panel) ||
+          worldContext(state) !== worldContext(previous) ||
           (state.playing !== previous.playing && !state.playing)
         ) {
           keys.current.clear();
@@ -165,7 +158,12 @@ function Founder() {
     const canvas = gl.domElement;
     let point: { x: number; y: number; id: number } | null = null;
     const down = (e: PointerEvent) => {
-      if (e.button !== 0 && e.button !== 2) return;
+      if (
+        !useGame.getState().playing ||
+        useGame.getState().panel ||
+        (e.button !== 0 && e.button !== 2)
+      )
+        return;
       point = { x: e.clientX, y: e.clientY, id: e.pointerId };
       canvas.setPointerCapture(e.pointerId);
     };
@@ -195,7 +193,12 @@ function Founder() {
     canvas.addEventListener("pointerup", up);
     canvas.addEventListener("pointercancel", up);
     window.addEventListener("blur", up);
+    const unsubscribe = useGame.subscribe((s) => {
+      if (s.panel || !s.playing) up();
+    });
     return () => {
+      unsubscribe();
+      up();
       canvas.removeEventListener("pointerdown", down);
       canvas.removeEventListener("pointermove", move);
       canvas.removeEventListener("pointerup", up);
@@ -224,7 +227,12 @@ function Founder() {
   }, [camera, controls]);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (editing(e.target) || useGame.getState().panel) return;
+      if (
+        editing(e.target) ||
+        useGame.getState().panel ||
+        worldContext(useGame.getState()) !== mountedContext.current
+      )
+        return;
       if (
         e.metaKey ||
         e.ctrlKey ||
@@ -239,43 +247,7 @@ function Founder() {
       if (["Space", "ArrowUp", "ArrowDown"].includes(e.code))
         e.preventDefault();
       if (e.code === useGame.getState().settings.keys.interact) {
-        const p = position.current;
-        const stations: [number, number, string][] = [
-          [-1.6, -2, "design"],
-          [
-            27,
-            -16,
-            useGame.getState().game?.property === "garage"
-              ? "production"
-              : "upgrades",
-          ],
-          [
-            33,
-            -12,
-            useGame.getState().game?.property === "garage"
-              ? "orders"
-              : "upgrades",
-          ],
-          [-4.2, 8, "wardrobe"],
-          [0, 3, "door"],
-          [3.3, -1.6, "production"],
-          [3.5, 1.4, "orders"],
-        ];
-        const near = stations
-          .filter(([x, z]) => Math.hypot(p.x - x, p.z - z) < 2)
-          .sort(
-            (a, b) =>
-              Math.hypot(p.x - a[0], p.z - a[1]) -
-              Math.hypot(p.x - b[0], p.z - b[1]),
-          )[0];
-        if (near?.[2] === "door") useGame.getState().dispatch({ type: "door" });
-        else if (near) useGame.getState().open(near[2]);
-        else
-          useGame
-            .getState()
-            .notify(
-              "Walk closer to a workstation or open its tool from the dock.",
-            );
+        useGame.getState().interact();
       }
     };
     const up = (e: KeyboardEvent) => {
@@ -284,6 +256,7 @@ function Founder() {
     };
     const blur = () => {
       keys.current.clear();
+      gl.domElement.dataset.player = `${position.current.x.toFixed(3)},${position.current.z.toFixed(3)}`;
       invalidate();
     };
     window.addEventListener("keydown", down);
@@ -300,12 +273,24 @@ function Founder() {
     const now = performance.now();
     const movementDelta = Math.min(
       Math.max((now - lastMotion.current) / 1000, 0),
-      5,
+      0.25,
     );
     lastMotion.current = now;
+    gl.domElement.dataset.player =
+      position.current.x.toFixed(3) + "," + position.current.z.toFixed(3);
     const k = keys.current;
     const st = useGame.getState();
-    const canMove = st.playing && !st.panel && !st.paused;
+    const sameWorld = worldContext(st) === mountedContext.current;
+    if (sameWorld) {
+      gl.domElement.dataset.worldKey = `${st.game?.companyId || "legacy"}:${st.worldEpoch}`;
+      gl.domElement.dataset.property = st.game?.property || "home";
+    }
+    const canMove = sameWorld && st.playing && !st.panel && !st.paused;
+    const interaction =
+      canMove && st.game
+        ? visibleStation(st.game, ref.current.rotation.y)?.id || null
+        : null;
+    if (interaction !== st.interaction) useGame.setState({ interaction });
     let dx = canMove
       ? Number(k.has(settings.keys.right)) - Number(k.has(settings.keys.left))
       : 0;
@@ -314,11 +299,19 @@ function Founder() {
       : 0;
     const moving = !!(dx || dz);
     if (moving || (canMove && k.has(settings.keys.jump))) invalidate();
+    if (!moving) pace.current = 0;
     if (moving) {
+      pace.current = THREE.MathUtils.damp(
+        pace.current,
+        1,
+        18,
+        Math.min(movementDelta, 0.1),
+      );
       const n = Math.hypot(dx, dz);
       const speed =
         (k.has(settings.keys.sprint) ? 3.6 : 2.1) *
         settings.movementSensitivity *
+        pace.current *
         movementDelta;
       dx = (dx / n) * speed;
       dz = (dz / n) * speed;
@@ -339,7 +332,13 @@ function Founder() {
         const orbit = controls as unknown as { target: THREE.Vector3 } | null;
         orbit?.target.add(offset);
       }
-      ref.current.rotation.y = Math.atan2(dx, dz);
+      const angle = Math.atan2(dx, dz);
+      ref.current.rotation.y +=
+        Math.atan2(
+          Math.sin(angle - ref.current.rotation.y),
+          Math.cos(angle - ref.current.rotation.y),
+        ) *
+        (1 - Math.exp(-18 * Math.min(movementDelta, 0.1)));
       walk.current += delta * 9;
       if (st.game) {
         st.game.player = [p.x, p.z];
@@ -356,6 +355,7 @@ function Founder() {
       canMove && k.has(settings.keys.jump)
         ? Math.abs(Math.sin(walk.current + performance.now() / 250)) * 0.28
         : 0;
+    gl.domElement.dataset.player = `${position.current.x.toFixed(3)},${position.current.z.toFixed(3)}`;
     ref.current.position.copy(position.current);
     ref.current.position.y =
       jump + (moving ? Math.sin(walk.current * 2) * 0.025 : 0);
@@ -372,7 +372,7 @@ function Founder() {
       camera.position.distanceTo(
         position.current.clone().add(new THREE.Vector3(0, 1.3, 0)),
       ) > 0.8;
-    if (settings.firstPerson) {
+    if (sameWorld && settings.firstPerson && !st.panel) {
       camera.position.lerp(
         position.current.clone().add(new THREE.Vector3(0, 1.55, 0.1)),
         0.2,
@@ -403,6 +403,12 @@ function Founder() {
       )
         invalidate();
     }
+    gl.domElement.dataset.view = [
+      ...camera.position.toArray(),
+      ...camera.quaternion.toArray(),
+    ]
+      .map((v) => v.toFixed(4))
+      .join(",");
   });
   return (
     <group ref={ref}>
@@ -578,7 +584,6 @@ function StudioDetails() {
 function Room() {
   const game = useGame((s) => s.game)!;
   const night = game.time % 240 > 170;
-  const open = useGame((s) => s.open);
   return (
     <>
       <color attach="background" args={["#c4c7bd"]} />
@@ -621,12 +626,8 @@ function Room() {
       <Box p={[-2.9, 0.88, -0.9]} s={[1.15, 0.22, 0.56]} c="#e6e0cb" />
       <Box p={[-1.5, 1.05, -2.8]} s={[2.8, 0.12, 1.1]} />
       <Legs x={-1.5} z={-2.8} w={2.8} d={1.1} />
-      <group onClick={() => open("design")}>
-        <Box p={[-1.6, 1.16, -2.7]} s={[0.9, 0.04, 0.57]} c="#a8aea4" />
-        <Box p={[-1.6, 1.51, -2.98]} s={[0.9, 0.66, 0.045]} c="#252b27" />
-        <Box p={[-1.6, 1.52, -2.948]} s={[0.82, 0.56, 0.012]} c="#d9ed91" />
-      </group>
-      {useGame.getState().settings.quality === "high" ? (
+      <ComputerHardware />
+      {useGame.getState().settings.textureQuality === "high" ? (
         <Suspense
           fallback={
             <>
@@ -709,15 +710,23 @@ function Room() {
           ))}
         </group>
       )}
-      <Label at={[-1.6, 2.45, -2.8]} onClick={() => open("design")}>
-        Design studio
-      </Label>
-      <Label at={[3.3, 2.2, -2.6]} onClick={() => open("production")}>
-        {industryOf(game).equipment} {game.jobs.length ? "· working" : ""}
-      </Label>
-      <Label at={[3.6, 1.85, 2.3]} onClick={() => open("orders")}>
-        Packing station
-      </Label>
+      {(game.deliveries || [])
+        .filter((d) => d.arrives <= game.time)
+        .slice(0, 4)
+        .map((d, i) => (
+          <group
+            key={d.id}
+            position={[
+              1.3 + (i % 2) * 0.45,
+              0.22,
+              10.8 + Math.floor(i / 2) * 0.45,
+            ]}
+            onClick={() => useGame.getState().interact("receiving")}
+          >
+            <Box p={[0, 0, 0]} s={[0.4, 0.4, 0.4]} c="#a3815b" />
+            <Box p={[0, 0.205, 0]} s={[0.06, 0.01, 0.4]} c="#d4b68c" />
+          </group>
+        ))}
       <Neighbourhood />
       <Garage />
       {game.waypoint && (
@@ -739,9 +748,15 @@ function Room() {
       )}
       <StudioDetails />
       <Founder
-        key={(game.companyId || "legacy") + ":" + (game.property || "home")}
+        key={
+          (game.companyId || "legacy") +
+          ":" +
+          (game.property || "home") +
+          ":" +
+          useGame.getState().worldEpoch
+        }
       />
-      {useGame.getState().settings.quality === "high" && (
+      {useGame.getState().settings.effects && (
         <ContactShadows
           position={[0, 0.02, 0]}
           opacity={0.28}
@@ -754,6 +769,76 @@ function Room() {
     </>
   );
 }
+function ComputerCamera() {
+  const { camera, controls, invalidate } = useThree();
+  const saved = useRef<{
+    position: THREE.Vector3;
+    quaternion: THREE.Quaternion;
+    target?: THREE.Vector3;
+    context: string;
+  } | null>(null);
+  useEffect(() => {
+    const transition = (
+      state: ReturnType<typeof useGame.getState>,
+      previous: ReturnType<typeof useGame.getState>,
+    ) => {
+      const orbit = controls as unknown as { target: THREE.Vector3 } | null;
+      if (state.panel === "computer" && previous.panel !== "computer") {
+        saved.current = {
+          position: camera.position.clone(),
+          quaternion: camera.quaternion.clone(),
+          target: orbit?.target.clone(),
+          context: `${state.game?.companyId}:${state.game?.property}:${state.worldEpoch}`,
+        };
+      } else if (
+        state.panel !== "computer" &&
+        previous.panel === "computer" &&
+        saved.current
+      ) {
+        if (
+          saved.current.context ===
+          `${state.game?.companyId}:${state.game?.property}:${state.worldEpoch}`
+        ) {
+          camera.position.copy(saved.current.position);
+          camera.quaternion.copy(saved.current.quaternion);
+          if (orbit && saved.current.target)
+            orbit.target.copy(saved.current.target);
+        }
+        saved.current = null;
+      }
+      if (state.panel !== previous.panel) invalidate();
+    };
+    return useGame.subscribe(transition);
+  }, [camera, controls, invalidate]);
+  useFrame((_, dt) => {
+    if (useGame.getState().panel !== "computer") return;
+    const g = useGame.getState().game!;
+    const garage = g.player[0] > 24;
+    const eye = new THREE.Vector3(
+      ...((garage ? [30, 1.55, -17] : [-1.15, 1.55, -1.5]) as [
+        number,
+        number,
+        number,
+      ]),
+    );
+    const target = new THREE.Vector3(
+      ...((garage ? [30, 1.55, -18] : [-1.6, 1.52, -2.94]) as [
+        number,
+        number,
+        number,
+      ]),
+    );
+    camera.position.lerp(eye, 1 - Math.exp(-8 * dt));
+    camera.quaternion.slerp(
+      new THREE.Quaternion().setFromRotationMatrix(
+        new THREE.Matrix4().lookAt(camera.position, target, camera.up),
+      ),
+      1 - Math.exp(-8 * dt),
+    );
+    if (camera.position.distanceTo(eye) > 0.002) invalidate();
+  });
+  return null;
+}
 export function World() {
   const enabled = useGame((s) => s.playing && !s.panel);
   const settings = useGame((s) => s.settings);
@@ -762,17 +847,17 @@ export function World() {
     <div className="world">
       {failed ? (
         <div className="world-fallback">
-          3D rendering is unavailable on this device. You can still run your
-          business using the workstation tabs.
+          3D rendering is unavailable on this device. Choose Low quality in
+          Settings, then reload to retry.
         </div>
       ) : (
         <Canvas
           frameloop="demand"
-          shadows={settings.quality === "high"}
-          dpr={settings.quality === "high" ? [1, 1.75] : 1}
+          shadows={settings.shadows}
+          dpr={settings.renderScale}
           camera={{ position: [10, 13, 14], fov: 43 }}
           gl={{
-            antialias: settings.quality === "high",
+            antialias: settings.antialias,
             powerPreference: "high-performance",
           }}
           onCreated={({ gl }) => {
@@ -808,6 +893,7 @@ export function World() {
             />
           )}
           {!settings.firstPerson && <CameraCollision />}
+          <ComputerCamera />
           <PointerRecovery enabled={enabled} />
         </Canvas>
       )}

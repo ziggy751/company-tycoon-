@@ -31,8 +31,9 @@ export function Controls() {
       </label>
       <p className="muted">
         Drag with one finger / the left button to orbit. Two-finger scroll,
-        pinch, or the wheel zooms. Click a station label or use the interaction
-        key. Middle click is never required. Scroll inside panels to read them.
+        pinch, or the wheel zooms. Walk near a station, then click its prompt or
+        use the interaction key. Middle click is never required. Scroll inside
+        panels to read them.
       </p>
       <label>
         Zoom sensitivity
@@ -74,7 +75,15 @@ export function Controls() {
       <h3>CONFIGURE KEYBOARD</h3>
       {Object.entries(s.keys).map(([action, code]) => (
         <div className="row" key={action}>
-          <span>{action}</span>
+          <span>
+            {(
+              {
+                phone: "SocialHub · near computer",
+                inventory: "Suppliers · near computer",
+                workspace: "Property · near computer",
+              } as Record<string, string>
+            )[action] || action}
+          </span>
           <button
             className="secondary"
             aria-label={`Rebind ${action}`}

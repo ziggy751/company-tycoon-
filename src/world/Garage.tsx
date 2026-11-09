@@ -1,4 +1,3 @@
-import { Html } from "@react-three/drei";
 import { useGame } from "../game/store";
 import { IndustryEquipment } from "./IndustryEquipment";
 import { surface } from "./materials";
@@ -19,12 +18,16 @@ function Block({
       userData={{ cameraSolid: true }}
     >
       <boxGeometry args={s} />
-      <meshStandardMaterial
-        color={c}
-        {...surface("concrete")}
-        bumpScale={0.02}
-        roughness={0.8}
-      />
+      {useGame.getState().settings.quality === "low" ? (
+        <meshLambertMaterial color={c} />
+      ) : (
+        <meshStandardMaterial
+          color={c}
+          {...surface("concrete")}
+          bumpScale={0.02}
+          roughness={0.8}
+        />
+      )}
     </mesh>
   );
 }
@@ -47,6 +50,14 @@ export function Garage() {
         <Block key={x} p={[x, h / 2, 5]} s={[4.5, h, 0.15]} c="#8c948c" />
       ))}
       {!inside && <Block p={[0, 3.65, 0]} s={[12.5, 0.2, 10.5]} c="#59645f" />}
+      {g.property === "garage" && (
+        <group onClick={() => useGame.getState().interact("computer")}>
+          <Block p={[0, 1, -4]} s={[1.6, 0.1, 0.7]} c="#85725d" />
+          <Block p={[0, 1.5, -4.2]} s={[1.1, 0.7, 0.06]} c="#242736" />
+          <Block p={[0, 1.5, -4.16]} s={[1, 0.6, 0.01]} c="#8862bd" />
+          <Block p={[0, 1.08, -3.9]} s={[0.8, 0.04, 0.3]} c="#4e5161" />
+        </group>
+      )}
       <Block p={[-3, 1, -3]} s={[3, 0.15, 1.4]} c="#85725d" />
       {[-4, -2].map((x) => (
         <Block key={x} p={[x, 0.5, -3]} s={[0.1, 1, 1]} c="#414941" />
@@ -63,34 +74,6 @@ export function Garage() {
           c="#4f5d52"
         />
       ))}
-      <Html position={[-3, 2.1, -3]} center distanceFactor={15}>
-        <button
-          className="world-label"
-          onClick={() =>
-            useGame
-              .getState()
-              .open(g.property === "garage" ? "production" : "upgrades")
-          }
-        >
-          {g.property === "garage"
-            ? "Workshop production"
-            : "Garage · future workspace"}
-        </button>
-      </Html>
-      <Html position={[3, 1.9, 2]} center distanceFactor={15}>
-        <button
-          className="world-label"
-          onClick={() =>
-            useGame
-              .getState()
-              .open(g.property === "garage" ? "orders" : "upgrades")
-          }
-        >
-          {g.property === "garage"
-            ? "Dispatch station"
-            : "View garage requirements"}
-        </button>
-      </Html>
     </group>
   );
 }

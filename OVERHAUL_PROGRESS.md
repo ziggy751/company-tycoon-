@@ -1,8 +1,10 @@
 # Company Tycoon — current overhaul status
 
-The first home/save increment is followed by the multi-industry update documented in **INDUSTRIES_RELEASE.md**. This is still not the complete original realism/world overhaul.
+The latest increment is the computer-led interface and 25-product starter catalogue, documented in **DESKTOP_RELEASE.md**. Earlier home/save and multi-industry work is documented in **INDUSTRIES_RELEASE.md**. The full realism/world brief remains in progress.
 
 ## Current playable scope
+
+The permanent business dock has been replaced by a physical computer and SummitOS app windows. Supplies and contracted batches now travel through tracked deliveries and physical receipt. Catalogue browsing, favourites/comparison, collections, premium finishing, a configurable online storefront and ledger cash-flow chart are working.
 
 Three industries: Streetwear & Clothing, MTB Accessories, Hair & Styling Accessories. Each has its own actual production/sourcing steps, costs, products, starter equipment and progression data. All three share the existing legitimate order/packing/shipping/ledger loop and independent local company saves.
 
@@ -16,6 +18,23 @@ The original first increment is retained in history at `4071d92`; the pre-overha
 
 ## Remaining work
 
-The full furniture editor, rigged human/animation work, richer interiors, seven other playable industries, retail/NPC/employee systems and the complete long-term property ladder are unfinished. Industry cards for future work are explicitly disabled, not fake working industries.
+The full furniture editor, rigged human/animation work, richer interiors, the remaining industries toward the requested total of 20, retail/NPC/employee systems and the complete long-term property ladder are unfinished. Industry cards for future work are explicitly disabled, not fake working industries.
 
-See INDUSTRIES_RELEASE.md for exact implemented families, workflows, costs, milestones, fixes, test evidence and limitations. Email login/D1 is separate unfinished work on `feature/email-cloud-saves`; it is not part of the current gameplay delivery.
+See DESKTOP_RELEASE.md for the current 25 implemented product types and workflows; INDUSTRIES_RELEASE.md records the previous release. The 150-product target remains unfinished. See these files for costs, milestones, fixes, test evidence and limitations. Email login/D1 is separate unfinished work on `feature/email-cloud-saves`; it is not part of the current gameplay delivery.
+
+## Current phase status
+
+- Phase 1 core: physical computers, ten working apps, window management, minimal HUD, contextual prompts and input isolation are implemented. Staffing remains a Phase 5 system; no decorative Employees app is presented as functional.
+- Phase 2 partial: 25 types across the original three industries, real recipe costs and processing, meaningful contracted vs physical workflows, browsing/comparison, collections and premium finishing. Collections/seasons are saved metadata; seasonal demand and the full 150 types are unfinished.
+- Phase 3: no additional playable industries in this increment.
+- Phase 4 partial: detailed procedural computer hardware and rendering presets/optimisation; full authored environments and a rigged human are unfinished.
+- Phase 5: existing earned garage progression is preserved; staffing, automation and the wider property ladder are unfinished.
+- Phase 6 partial: expanded unit/browser regression coverage, input, receipt and save fixes. Physical MacBook/Windows hardware and Safari have not been tested.
+
+## Bugs fixed in this increment
+
+Scene-wide labels and duplicate objectives no longer leak into menus. Business tools cannot be opened from across the world. Pointer capture and held movement clear when entering the computer. Camera restoration is immediate on exit. Minimising apps preserves drafts. Pending deliveries reserve storage and cannot be received twice. Premium material quotes and charges agree. Manual slot loads reset physical position even for the same company. Stale movement is blocked across company/property activation. A new garage desk has navigation collision. Empty expense totals display zero correctly.
+
+## Validation status
+
+The production TypeScript/Vite build and 58 Vitest checks pass. The broad production Chromium run passed 23 of 25 scenarios. The wardrobe route and company-activation timing checks were corrected; all four targeted save/wardrobe/company/garage reruns passed. All 25 distinct scenarios have therefore passed across the broad run and targeted reruns. The final desktop/window/draft-preservation scenario also passed on the release build. Gameplay tests use Low under the software renderer, with a separate High-quality authored-asset render test. No hardware FPS claim is made. The main JS bundle remains approximately 1.35 MB / 384 KB gzip and Vite still reports its large-chunk advisory.

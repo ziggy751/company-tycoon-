@@ -1,3 +1,4 @@
+import { tool, closeUI, axis, exitGame, position } from "./helpers";
 import { test, expect } from "@playwright/test";
 for (const mode of ["trackpad", "mouse"])
   test(`${mode}: primary drag, wheel/pinch, panel scrolling, rebinding and click interaction`, async ({
@@ -21,6 +22,7 @@ for (const mode of ["trackpad", "mouse"])
       })
       .click();
     await page.getByRole("button", { name: "Open the studio" }).click();
+    await closeUI(page);
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByLabel("Input preset").selectOption(mode);
     await page.getByRole("button", { name: "Rebind interact" }).click();
@@ -28,11 +30,12 @@ for (const mode of ["trackpad", "mouse"])
     await expect(
       page.getByRole("button", { name: "Rebind interact" }),
     ).toHaveText("F");
-    await page.getByRole("button", { name: "Close workstation" }).click();
+    await closeUI(page);
+    await axis(page, 1, 3);
     await page.keyboard.press("KeyF");
-    await expect(
-      page.getByRole("button", { name: "Close bedroom door", exact: true }),
-    ).toBeVisible();
+    await expect(page.locator(".interaction-prompt")).toContainText(
+      "Close Door",
+    );
     const canvas = page.locator(".world canvas");
     const before = await canvas.getAttribute("data-camera");
     await page.mouse.move(900, 380);
@@ -54,6 +57,7 @@ for (const mode of ["trackpad", "mouse"])
       await page.mouse.wheel(0, 120);
     }
     await expect(canvas).not.toHaveAttribute("data-camera", orbit || "");
+    await closeUI(page);
     await page.getByRole("button", { name: "Open settings" }).click();
     const body = page.locator(".panel-body");
     await body.evaluate((e) => {
@@ -64,15 +68,16 @@ for (const mode of ["trackpad", "mouse"])
     await expect
       .poll(() => body.evaluate((e) => e.scrollTop))
       .toBeGreaterThan(0);
-    await page.getByRole("button", { name: "Close workstation" }).click();
-    await page.getByRole("button", { name: "Design", exact: true }).click();
+    await closeUI(page);
+    await tool(page, "design");
     await expect(
-      page.getByRole("button", { name: "Save as new product" }),
+      page.getByRole("button", { name: "Save product design" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Close workstation" }).click();
-    await page.getByRole("button", { name: "Save journal" }).click();
+    await closeUI(page);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.reload();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await closeUI(page);
     await page.getByRole("button", { name: "Open settings" }).click();
     await expect(page.getByLabel("Input preset")).toHaveValue(mode);
     await expect(
@@ -99,41 +104,32 @@ test("menus and text focus isolate game input; blur releases movement and drag c
     .click();
   await page.getByRole("button", { name: "Open the studio" }).click();
   await page.getByRole("button", { name: "No, start playing" }).click();
-  await page.getByRole("button", { name: "Design", exact: true }).click();
+  await tool(page, "design");
   await page.getByLabel("Product name").fill("");
   await page.getByLabel("Product name").pressSequentially("wasd e test");
   await page.getByLabel("Product name").press("Tab");
   await expect(
-    page.getByRole("complementary", { name: "Design studio" }),
+    page.getByRole("article", { name: "Design Studio window" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("complementary", { name: "Design studio" }),
+    page.getByRole("article", { name: "Design Studio window" }),
   ).toHaveCount(0);
   await page.keyboard.down("KeyW");
   await page.waitForTimeout(500);
   await page.evaluate(() => window.dispatchEvent(new Event("blur")));
   await page.waitForTimeout(300);
-  const target = await page
-    .locator(".world canvas")
-    .getAttribute("data-camera")
-    .then((s) => s?.split(",").slice(3).join(","));
+  const target = await position(page);
   await page.waitForTimeout(600);
-  const later = await page
-    .locator(".world canvas")
-    .getAttribute("data-camera")
-    .then((s) => s?.split(",").slice(3).join(","));
-  const earlierTarget = target!.split(",").map(Number),
-    laterTarget = later!.split(",").map(Number);
-  expect(
-    Math.hypot(...laterTarget.map((v, i) => v - earlierTarget[i])),
-  ).toBeLessThan(0.1);
+  const later = await position(page);
+  expect(Math.hypot(...later.map((v, i) => v - target[i]))).toBeLessThan(0.1);
   await page.keyboard.up("KeyW");
   await page.mouse.move(1000, 400);
   await page.mouse.down();
   await page.mouse.move(1100, 430, { steps: 4 });
   await page.evaluate(() => window.dispatchEvent(new Event("blur")));
   await page.mouse.up();
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await expect(
     page.getByRole("complementary", { name: "Settings" }),

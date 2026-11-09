@@ -39,16 +39,24 @@ export function IndustryEquipment({ garage = false }: { garage?: boolean }) {
   const d = g.designs.find((d) => d.id === job?.designId) || g.designs[0];
   useFrame(({ clock }) => {
     if (paused) return;
-    if (job && job.kind !== "contract") invalidate();
+    if (
+      job &&
+      (industry === "streetwear"
+        ? !job.kind || job.kind === "print"
+        : job.kind !== "contract")
+    )
+      invalidate();
     if (arm.current)
       arm.current.position.x =
         job?.kind === "prototype" || job?.kind === "inspect"
           ? Math.sin(clock.elapsedTime * 2) * 0.2
           : 0;
+    if (arm.current && industry === "streetwear") arm.current.position.x = 0;
     if (arm.current && industry === "streetwear")
-      arm.current.rotation.x = job
-        ? -Math.abs(Math.sin(clock.elapsedTime * 2)) * 0.2
-        : 0;
+      arm.current.rotation.x =
+        job && (!job.kind || job.kind === "print")
+          ? -Math.abs(Math.sin(clock.elapsedTime * 2)) * 0.2
+          : 0;
     if (roller.current && job?.kind === "label")
       roller.current.rotation.x += 0.07;
   });

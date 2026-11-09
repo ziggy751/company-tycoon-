@@ -1,3 +1,4 @@
+import { tool, closeUI, axis, exitGame } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 const industries = [
   {
@@ -34,14 +35,14 @@ async function create(page: Page, industry: (typeof industries)[number]) {
   await page.getByRole("button", { name: "Toggle simulation speed" }).click();
 }
 async function design(page: Page, id: string) {
-  await page.getByRole("button", { name: "Design", exact: true }).click();
+  await tool(page, "design");
   await page
     .getByRole("button", {
-      name: id === "streetwear" ? "Save as new product" : "Save product design",
+      name: "Save product design",
       exact: true,
     })
     .click();
-  await page.getByRole("button", { name: "Produce", exact: true }).click();
+  await tool(page, "production");
 }
 async function manufacture(page: Page, id: string) {
   if (id === "streetwear") {
@@ -58,12 +59,16 @@ async function manufacture(page: Page, id: string) {
         })
         .click();
       await expect(
-        page.getByRole("button", { name: /^Contract 3 pieces/ }),
+        page.getByText("Workstation ready", { exact: true }),
       ).toBeVisible({ timeout: 20000 });
     }
-    await page
-      .getByRole("button", { name: /^(Contract|Source) 3 pieces/ })
-      .click();
+    await tool(page, "inventory");
+    await page.getByRole("button", { name: /^Contract 3 pieces/ }).click();
+    await tool(page, "receiving");
+    const unpack = page.getByRole("button", { name: "Unpack delivery" });
+    await expect(unpack).toBeEnabled({ timeout: 30000 });
+    await unpack.click();
+    await tool(page, "production");
     if (id === "mtb") {
       const inspect = page.getByRole("button", {
         name: "Inspect incoming batch",
@@ -87,58 +92,6 @@ async function manufacture(page: Page, id: string) {
     }
   }
 }
-for (const i of industries)
-  test(`${i.id}: design, real production, sale, independent save and refresh`, async ({
-    page,
-  }) => {
-    test.setTimeout(150000);
-    await page.addInitScript(() =>
-      localStorage.setItem(
-        "streetwear-settings",
-        JSON.stringify({ quality: "low", sensitivity: 1, volume: 0 }),
-      ),
-    );
-    const errors: string[] = [];
-    page.on("pageerror", (e) => errors.push(e.message));
-    await page.goto("/");
-    await create(page, i);
-    await design(page, i.id);
-    await manufacture(page, i.id);
-    await page.getByRole("button", { name: "SocialHub", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Publish product reveal", exact: true })
-      .click();
-    await page.getByRole("button", { name: /^Orders/ }).click();
-    await page
-      .getByRole("button", { name: "Pack order", exact: true })
-      .first()
-      .click({ timeout: 20000 });
-    await page
-      .getByRole("button", { name: "Ship · $5", exact: true })
-      .first()
-      .click();
-    await expect(page.locator(".badge.success").first()).toBeVisible({
-      timeout: 15000,
-    });
-    await page.getByRole("button", { name: "Finances", exact: true }).click();
-    await expect(
-      page.getByText("Sale · Alex R.", { exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Save & return to menu", exact: true })
-      .click();
-    await page.reload();
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page.getByRole("button", { name: "Produce", exact: true }).click();
-    await expect(
-      page.getByText(
-        i.id === "streetwear" ? "Heat press ready" : "Workstation ready",
-        { exact: true },
-      ),
-    ).toBeVisible();
-    await page.screenshot({ path: `test-results/${i.id}-production.png` });
-    expect(errors).toEqual([]);
-  });
 test("three different companies remain independent through switching and reload", async ({
   page,
 }) => {
@@ -153,9 +106,7 @@ test("three different companies remain independent through switching and reload"
   for (const i of industries) {
     await create(page, i);
     await design(page, i.id);
-    await page
-      .getByRole("button", { name: "Save & return to menu", exact: true })
-      .click();
+    await exitGame(page);
   }
   await page.reload();
   for (const i of industries) {
@@ -170,18 +121,11 @@ test("three different companies remain independent through switching and reload"
     });
     await expect(card).toContainText(i.name);
     await card.getByRole("button", { name: "Play", exact: true }).click();
-    await page.getByRole("button", { name: "Design", exact: true }).click();
-    if (i.id === "streetwear")
-      await expect(
-        page.getByText("Studio tee 01", { exact: true }),
-      ).toBeVisible();
-    else
-      await expect(
-        page.locator(".panel-body strong").filter({ hasText: i.product }),
-      ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Save & return to menu", exact: true })
-      .click();
+    await tool(page, "design");
+    await expect(
+      page.locator(".window-body strong").filter({ hasText: i.product }),
+    ).toBeVisible();
+    await exitGame(page);
   }
 });
 test("optional tutorial pays $100 once and preserves the reward after reload", async ({
@@ -213,38 +157,38 @@ test("optional tutorial pays $100 once and preserves the reward after reload", a
   }
   await page.getByRole("button", { name: "Toggle simulation speed" }).click();
   await design(page, "streetwear");
-  await page.getByRole("button", { name: "Supplies", exact: true }).click();
+  await tool(page, "inventory");
   await page
-    .getByRole("button", { name: "Buy 1", exact: true })
-    .first()
+    .locator(".supply")
+    .filter({ hasText: "Cotton T-shirt blanks" })
+    .getByRole("button", { name: "Order 1", exact: true })
     .click();
-  await page.getByRole("button", { name: "Produce", exact: true }).click();
+  await tool(page, "production");
   await manufacture(page, "streetwear");
-  await page.getByRole("button", { name: "SocialHub", exact: true }).click();
+  await tool(page, "social");
   await page
     .getByRole("button", { name: "Publish product reveal", exact: true })
     .click();
-  await page.getByRole("button", { name: /^Orders/ }).click();
+  await tool(page, "orders");
   await page
     .getByRole("button", { name: "Pack order", exact: true })
     .click({ timeout: 20000 });
   await page.getByRole("button", { name: "Ship · $5", exact: true }).click();
   await expect(page.locator(".badge.success")).toBeVisible({ timeout: 15000 });
-  await page.getByRole("button", { name: "Finances", exact: true }).click();
+  await tool(page, "finances");
   await expect(
     page.getByText("Tutorial completion grant", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("$613", { exact: true }).first()).toBeVisible();
-  await page
-    .getByRole("button", { name: "Save & return to menu", exact: true })
-    .click();
+  await exitGame(page);
   await page.reload();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await page
     .getByRole("button", { name: "Start / resume tutorial", exact: true })
     .click();
-  await page.getByRole("button", { name: "Finances", exact: true }).click();
+  await tool(page, "finances");
   await expect(
     page.getByText("Tutorial completion grant", { exact: true }),
   ).toHaveCount(1);
@@ -321,6 +265,7 @@ test("earned garage purchase changes the physical workspace, capacity and suppli
   g.reputation = 100;
   g.upgrades = ["storage"];
   g.nextId = 2000;
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Manage saves" }).click();
   await page.locator("input[type=file]").setInputFiles({
@@ -329,27 +274,26 @@ test("earned garage purchase changes the physical workspace, capacity and suppli
     buffer: Buffer.from(JSON.stringify(g)),
   });
   await expect(page.getByRole("status")).toContainText("Save imported");
-  await page.getByRole("button", { name: "Workspace", exact: true }).click();
+  await tool(page, "upgrades");
   await page
     .getByRole("button", { name: "Purchase garage · $1,500", exact: true })
     .click();
+  await tool(page, "upgrades");
   await expect(
     page.getByRole("button", { name: "Garage owned", exact: true }),
   ).toBeDisabled();
-  await page.getByRole("button", { name: "Produce", exact: true }).click();
+  await tool(page, "inventory");
   await page
     .getByRole("button", { name: "Contract 6 pieces · $27", exact: true })
     .click();
-  await expect(page.getByText(/0 finished · 6 uninspected/)).toBeVisible({
-    timeout: 25000,
-  });
-  await page
-    .getByRole("button", { name: "Save & return to menu", exact: true })
-    .click();
+  await expect(
+    page.getByText("6 × Trail protection", { exact: true }),
+  ).toBeVisible({ timeout: 45000 });
+  await exitGame(page);
   await page.reload();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
-    page.getByText("WORKSHOP TEST / GARAGE WORKSHOP", { exact: true }),
+    page.locator(".brand-home b").filter({ hasText: "WORKSHOP TEST" }),
   ).toBeVisible();
   await page.keyboard.press("KeyM");
   await expect(

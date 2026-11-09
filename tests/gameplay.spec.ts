@@ -1,4 +1,14 @@
+import { tool, closeUI, axis, exitGame, position } from "./helpers";
 import { test, expect } from "@playwright/test";
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem("streetwear-settings"))
+      localStorage.setItem(
+        "streetwear-settings",
+        JSON.stringify({ quality: "low", volume: 0, sensitivity: 1 }),
+      );
+  });
+});
 test("new game → design → manufacture → advertise → pack → ship → upgrade → refresh", async ({
   page,
 }) => {
@@ -13,19 +23,19 @@ test("new game → design → manufacture → advertise → pack → ship → up
   await page.getByRole("button", { name: "Open the studio" }).click();
   await expect(page.getByText("$500", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Toggle simulation speed" }).click();
-  await page.getByRole("button", { name: "Design", exact: true }).click();
-  await page.getByRole("button", { name: "Save as new product" }).click();
+  await tool(page, "design");
+  await page.getByRole("button", { name: "Save product design" }).click();
   await expect(
-    page.getByRole("button", { name: "Sample saved — ready to produce" }),
+    page.getByRole("button", { name: "Product saved" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Produce", exact: true }).click();
+  await tool(page, "production");
   await page.getByRole("button", { name: "Print", exact: true }).click();
   await expect(page.getByText("Heat press ready", { exact: true })).toBeVisible(
     { timeout: 20000 },
   );
-  await page.getByRole("button", { name: "SocialHub", exact: true }).click();
+  await tool(page, "social");
   await page.getByRole("button", { name: "Publish product reveal" }).click();
-  await page.getByRole("button", { name: /^Orders/ }).click();
+  await tool(page, "orders");
   await page
     .getByRole("button", { name: "Pack order" })
     .click({ timeout: 15000 });
@@ -33,24 +43,26 @@ test("new game → design → manufacture → advertise → pack → ship → up
   await expect(
     page.locator(".badge.success").filter({ hasText: "delivered" }),
   ).toBeVisible({ timeout: 15000 });
-  await page.getByRole("button", { name: "Finances", exact: true }).click();
+  await tool(page, "finances");
   await expect(page.getByText("$525", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Sale · Alex R.")).toBeVisible();
-  await page.getByRole("button", { name: "Workspace", exact: true }).click();
+  await tool(page, "upgrades");
   await page
     .getByRole("button", { name: "Purchase & install" })
     .first()
     .click();
   await expect(page.getByRole("button", { name: "Installed" })).toBeVisible();
   await expect(page.getByText("First sale", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close workstation" }).click();
-  await page.getByRole("button", { name: "Save journal" }).click();
-  await expect(page.getByText("Saved locally", { exact: true })).toBeVisible();
+  await closeUI(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.locator(".minimal-status").getByText("Saved locally", { exact: true }),
+  ).toBeVisible();
   await page.screenshot({ path: "test-results/bedroom.png" });
   await page.reload();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByText("$405", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Orders", exact: true }).click();
+  await tool(page, "orders");
   await expect(
     page.locator(".badge.success").filter({ hasText: "delivered" }),
   ).toBeVisible();
@@ -68,8 +80,10 @@ test("menu and mobile layout remain usable", async ({ page }) => {
     .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
     .click();
   await page.getByRole("button", { name: "Open the studio" }).click();
-  await page.getByRole("button", { name: "Supplies", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Buy 5 · $60" })).toBeVisible();
+  await tool(page, "inventory");
+  await expect(
+    page.getByRole("button", { name: "Order 5 · $60" }),
+  ).toBeVisible();
   await expect(page.locator("body")).toHaveJSProperty("scrollWidth", 390);
 });
 test("manual slots, local export/import and corrupt-save rejection", async ({
@@ -81,6 +95,7 @@ test("manual slots, local export/import and corrupt-save rejection", async ({
     .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
     .click();
   await page.getByRole("button", { name: "Open the studio" }).click();
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Manage saves" }).click();
   const slot = page
@@ -96,13 +111,18 @@ test("manual slots, local export/import and corrupt-save rejection", async ({
   expect(file.suggestedFilename()).toBe("company-tycoon-save.json");
   const path = await file.path();
   expect(path).toBeTruthy();
-  await page.getByRole("button", { name: "Supplies", exact: true }).click();
-  await page.getByRole("button", { name: "Buy 5 · $60" }).click();
+  await tool(page, "inventory");
+  await page.getByRole("button", { name: "Order 5 · $60" }).click();
   await expect(page.getByText("$440", { exact: true })).toBeVisible();
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Manage saves" }).click();
   await slot.getByRole("button", { name: "Load", exact: true }).click();
   await expect(page.getByText("$500", { exact: true })).toBeVisible();
+  await expect
+    .poll(async () => Math.abs((await position(page))[1] - 2))
+    .toBeLessThan(0.15);
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Manage saves" }).click();
   await page.locator("input[type=file]").setInputFiles({
@@ -127,9 +147,9 @@ test("two companies keep balances independent through switching and refresh", as
     .click();
   await page.getByLabel("Company name").fill("FIRST LABEL");
   await page.getByRole("button", { name: "Open the studio" }).click();
-  await page.getByRole("button", { name: "Supplies", exact: true }).click();
-  await page.getByRole("button", { name: "Buy 5 · $60" }).click();
-  await page.getByRole("button", { name: "Save & return to menu" }).click();
+  await tool(page, "inventory");
+  await page.getByRole("button", { name: "Order 5 · $60" }).click();
+  await exitGame(page);
   await page.getByRole("button", { name: "Create Company" }).click();
   await page
     .getByRole("button", { name: "Choose Streetwear & Clothing", exact: true })
@@ -137,7 +157,7 @@ test("two companies keep balances independent through switching and refresh", as
   await page.getByLabel("Company name").fill("SECOND LABEL");
   await page.getByRole("button", { name: "Open the studio" }).click();
   await expect(page.getByText("$500", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Save & return to menu" }).click();
+  await exitGame(page);
   for (const [name, cash] of [
     ["FIRST LABEL", "$440"],
     ["SECOND LABEL", "$500"],
@@ -150,7 +170,7 @@ test("two companies keep balances independent through switching and refresh", as
       .getByRole("button", { name: "Play", exact: true })
       .click();
     await expect(page.getByText(cash, { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Save & return to menu" }).click();
+    await exitGame(page);
   }
   await page.reload();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -181,7 +201,9 @@ test("original autosave migrates without losing money or deleting its backup", a
   }, old);
   await page.reload();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByText("LEGACY LABEL / BEDROOM STUDIO")).toBeVisible();
+  await expect(
+    page.locator(".brand-home b").filter({ hasText: "LEGACY LABEL" }),
+  ).toBeVisible();
   await expect(page.getByText("$500", { exact: true })).toBeVisible();
 });
 test("manufactured wardrobe sample and home controls persist", async ({
@@ -206,13 +228,14 @@ test("manufactured wardrobe sample and home controls persist", async ({
     .click();
   await page.getByRole("button", { name: "Open the studio" }).click();
   await page.getByRole("button", { name: "Toggle simulation speed" }).click();
-  await page.getByRole("button", { name: "Design", exact: true }).click();
-  await page.getByRole("button", { name: "Save as new product" }).click();
-  await page.getByRole("button", { name: "Produce", exact: true }).click();
+  await tool(page, "design");
+  await page.getByRole("button", { name: "Save product design" }).click();
+  await tool(page, "production");
   await page.getByRole("button", { name: "Print", exact: true }).click();
   await expect(page.getByText("Heat press ready", { exact: true })).toBeVisible(
     { timeout: 20000 },
   );
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await page
     .getByRole("button", { name: "Open wardrobe & home controls" })
@@ -229,10 +252,13 @@ test("manufactured wardrobe sample and home controls persist", async ({
     .getByRole("button", { name: "Open bedroom door", exact: true })
     .last()
     .click();
-  await page.getByRole("button", { name: "Save journal" }).click();
-  await expect(page.getByText("Saved locally", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.locator(".minimal-status").getByText("Saved locally", { exact: true }),
+  ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await page
     .getByRole("button", { name: "Open wardrobe & home controls" })
@@ -248,7 +274,8 @@ test("manufactured wardrobe sample and home controls persist", async ({
       .getByRole("button", { name: "Close bedroom door", exact: true })
       .last(),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Close workstation" }).click();
+  await closeUI(page);
+  await axis(page, 0, 0);
   await page.keyboard.down("KeyS");
   try {
     await expect
@@ -265,8 +292,10 @@ test("manufactured wardrobe sample and home controls persist", async ({
   } finally {
     await page.keyboard.up("KeyS");
   }
-  await page.getByRole("button", { name: "Save journal" }).click();
-  await expect(page.getByText("Saved locally", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.locator(".minimal-status").getByText("Saved locally", { exact: true }),
+  ).toBeVisible();
   const position = await page.evaluate(async () => {
     const d = await new Promise<IDBDatabase>((res) => {
       const r = indexedDB.open("streetwear-empire", 2);
@@ -309,7 +338,7 @@ test("company deletion requires confirmation and updates Continue", async ({
     .click();
   await page.getByLabel("Company name").fill("DELETE TEST");
   await page.getByRole("button", { name: "Open the studio" }).click();
-  await page.getByRole("button", { name: "Save & return to menu" }).click();
+  await exitGame(page);
   await page.getByRole("button", { name: "My Companies" }).click();
   page.once("dialog", (d) => d.dismiss());
   await page.getByRole("button", { name: "Delete", exact: true }).click();
@@ -344,8 +373,11 @@ test("a failed import preserves the current company instead of claiming success"
     .click();
   await page.getByLabel("Company name").fill("SAFE EXISTING");
   await page.getByRole("button", { name: "Open the studio" }).click();
-  await page.getByRole("button", { name: "Save journal" }).click();
-  await expect(page.getByText("Saved locally", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.locator(".minimal-status").getByText("Saved locally", { exact: true }),
+  ).toBeVisible();
+  await closeUI(page);
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Manage saves" }).click();
   await page.evaluate(() => {
@@ -372,7 +404,7 @@ test("a failed import preserves the current company instead of claiming success"
     "import was not applied",
   );
   await expect(
-    page.getByText("SAFE EXISTING / BEDROOM STUDIO", { exact: true }),
+    page.locator(".brand-home b").filter({ hasText: "SAFE EXISTING" }),
   ).toBeVisible();
   await page.evaluate(() => {
     (window as unknown as { restorePut: () => void }).restorePut();
@@ -380,6 +412,6 @@ test("a failed import preserves the current company instead of claiming success"
   await page.reload();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
-    page.getByText("SAFE EXISTING / BEDROOM STUDIO", { exact: true }),
+    page.locator(".brand-home b").filter({ hasText: "SAFE EXISTING" }),
   ).toBeVisible();
 });

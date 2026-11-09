@@ -1,6 +1,7 @@
 import {
   industryOf,
   productOf,
+  supplierUnitCost,
   industryUpgrades,
   INDUSTRIES,
   TUTORIAL_TASKS,
@@ -14,6 +15,9 @@ export type Design = {
   kind?: ProductKind;
   rawStock?: number;
   prototypeApproved?: boolean;
+  collection?: string;
+  season?: "All year" | "Spring" | "Summer" | "Autumn" | "Winter";
+  finish?: "standard" | "premium";
   name: string;
   color: string;
   ink: string;
@@ -38,7 +42,19 @@ export type Entry = {
   amount: number;
   type: "expense" | "revenue" | "grant";
 };
+export type Delivery = {
+  id: string;
+  item: "blanks" | "packaging" | "labels" | "batch";
+  quantity: number;
+  arrives: number;
+  designId?: string;
+};
 export type Game = {
+  deliveries?: Delivery[];
+  favourites?: ProductKind[];
+  storeOpen?: boolean;
+  storeTheme?: "midnight" | "paper" | "violet";
+  listed?: string[];
   version: 1;
   industry?: IndustryId;
   labels?: number;
@@ -96,6 +112,15 @@ export type Action =
   | { type: "design"; design: Omit<Design, "id" | "stock"> }
   | { type: "price"; id: string; price: number }
   | { type: "buy"; item: "blanks" | "packaging" | "labels"; quantity: number }
+  | {
+      type: "order-supplies";
+      item: "blanks" | "packaging" | "labels";
+      quantity: number;
+    }
+  | { type: "receive"; id: string }
+  | { type: "favourite"; kind: ProductKind }
+  | { type: "store"; enabled: boolean; theme: "midnight" | "paper" | "violet" }
+  | { type: "listing"; id: string }
   | { type: "produce"; id: string }
   | { type: "prototype" | "contract" | "inspect" | "label"; id: string }
   | { type: "tutorial-start" | "tutorial-skip" }
@@ -130,9 +155,9 @@ export const revenue = (s: Game) =>
     .filter((x) => x.type === "revenue")
     .reduce((v, x) => v + x.amount, 0);
 export const expenses = (s: Game) =>
-  -s.ledger
+  s.ledger
     .filter((x) => x.type === "expense")
-    .reduce((v, x) => v + x.amount, 0);
+    .reduce((v, x) => v - x.amount, 0);
 export const completed = (s: Game) =>
   s.orders.filter((o) => o.status === "delivered").length;
 export const capacity = (s: Game) =>
@@ -142,6 +167,9 @@ export const capacity = (s: Game) =>
       ? 40
       : E.capacity;
 export const occupied = (s: Game) =>
+  (s.deliveries || [])
+    .filter((d) => d.item === "blanks" || d.item === "batch")
+    .reduce((n, d) => n + d.quantity, 0) +
   s.blanks +
   s.designs.reduce((v, d) => v + d.stock + (d.rawStock || 0), 0) +
   s.jobs.reduce((n, j) => n + (j.quantity ?? 1), 0) +
@@ -235,6 +263,71 @@ function achievements(s: Game) {
 export function act(state: Game, action: Action): Game {
   const s = clone(state);
   switch (action.type) {
+    case "store":
+      check(
+        ["midnight", "paper", "violet"].includes(action.theme),
+        "Choose a store theme.",
+      );
+      s.storeOpen = !!action.enabled;
+      s.storeTheme = action.theme;
+      break;
+    case "listing":
+      check(
+        s.designs.some((d) => d.id === action.id),
+        "Product not found.",
+      );
+      s.listed ??= s.designs.map((d) => d.id);
+      s.listed = s.listed.includes(action.id)
+        ? s.listed.filter((id) => id !== action.id)
+        : [...s.listed, action.id];
+      break;
+    case "favourite":
+      check(industryOf(s).products.includes(action.kind), "Unknown product.");
+      s.favourites ??= [];
+      s.favourites = s.favourites.includes(action.kind)
+        ? s.favourites.filter((k) => k !== action.kind)
+        : [...s.favourites, action.kind];
+      break;
+    case "order-supplies": {
+      // Run the same validation/payment as legacy collection, then reserve the
+      // stock in transit. Old local saves and old actions remain compatible.
+      const purchased = act(s, {
+        type: "buy",
+        item: action.item,
+        quantity: action.quantity,
+      });
+      const pending = (s.deliveries || [])
+        .filter((d) => d.item === action.item)
+        .reduce((n, d) => n + d.quantity, 0);
+      if (action.item !== "blanks")
+        check(
+          (s[action.item] || 0) + pending + action.quantity <= 100,
+          "Supply shelf holds 100 units including deliveries.",
+        );
+      purchased[action.item] = (purchased[action.item] || 0) - action.quantity;
+      purchased.deliveries ??= [];
+      purchased.deliveries.push({
+        id: id(purchased),
+        item: action.item,
+        quantity: action.quantity,
+        arrives: s.time + 18,
+      });
+      return purchased;
+    }
+    case "receive": {
+      const delivery = s.deliveries?.find((d) => d.id === action.id);
+      check(
+        delivery && delivery.arrives <= s.time,
+        "Delivery has not arrived.",
+      );
+      if (delivery!.item === "batch") {
+        const d = s.designs.find((d) => d.id === delivery!.designId);
+        check(d, "Delivery product is missing.");
+        d!.rawStock = (d!.rawStock || 0) + delivery!.quantity;
+      } else s[delivery!.item] = (s[delivery!.item] || 0) + delivery!.quantity;
+      s.deliveries = s.deliveries!.filter((d) => d.id !== action.id);
+      break;
+    }
     case "waypoint":
       check(action.position.every(Number.isFinite), "Invalid waypoint.");
       s.waypoint = action.position;
@@ -288,7 +381,10 @@ export function act(state: Game, action: Action): Game {
         quantity = 0;
       }
       if (action.type === "contract") {
-        check(industry !== "streetwear", "Use the heat press for clothing.");
+        check(
+          p.method !== "transfer",
+          "Use the heat press for cotton T-shirts.",
+        );
         check(
           industry !== "mtb" || d!.prototypeApproved,
           "Approve a prototype before contracting a batch.",
@@ -298,13 +394,16 @@ export function act(state: Game, action: Action): Game {
         spend(
           s,
           industryOf(s).supplier + " · " + quantity + " " + p.name,
-          quantity * p.unitCost,
+          quantity * supplierUnitCost(d!),
         );
-        seconds = p.seconds;
+        seconds = p.seconds + (d!.finish === "premium" ? 8 : 0);
         task(s, "materials");
       }
       if (action.type === "inspect") {
-        check(industry === "mtb", "Inspection is an MTB workflow.");
+        check(
+          industry !== "haircare",
+          "Hair accessories need labelling at the preparation bench.",
+        );
         quantity = d!.rawStock || 0;
         check(quantity > 0, "Wait for the supplier batch to arrive.");
         d!.rawStock = 0;
@@ -373,6 +472,18 @@ export function act(state: Game, action: Action): Game {
         industryOf(s).products.includes(d.kind || "shirt"),
         "This product does not belong to your industry.",
       );
+      check(
+        s.reputation >= productOf(d).unlockReputation,
+        `Reach reputation ${productOf(d).unlockReputation} to unlock this product.`,
+      );
+      check(
+        !d.finish || ["standard", "premium"].includes(d.finish),
+        "Unknown finish.",
+      );
+      check(
+        !d.collection || d.collection.length <= 32,
+        "Collection name is too long.",
+      );
       task(s, "design");
       task(s, "price");
       s.designs.push({
@@ -440,7 +551,7 @@ export function act(state: Game, action: Action): Game {
       task(s, "materials");
       break;
     }
-    case "produce":
+    case "produce": {
       check(
         industryOf(s).id === "streetwear",
         "This company does not use a heat press.",
@@ -449,16 +560,34 @@ export function act(state: Game, action: Action): Game {
         s.designs.some((d) => d.id === action.id),
         "Save a design first.",
       );
+      check(
+        productOf(s.designs.find((d) => d.id === action.id)!).method ===
+          "transfer",
+        "This product needs a specialist supplier, not a heat press.",
+      );
       check(s.blanks > 0, "Buy more blank shirts.");
       check(s.jobs.length === 0, "The press is busy.");
-      spend(s, "Heat transfer ink", E.ink);
+      const design = s.designs.find((d) => d.id === action.id)!;
+      const extra =
+        design.finish === "premium"
+          ? Math.round(productOf(design).unitCost * 0.25)
+          : 0;
+      spend(
+        s,
+        "Heat transfer ink" + (extra ? " & premium finish" : ""),
+        E.ink + extra,
+      );
       s.blanks--;
       s.jobs.push({
         id: id(s),
         designId: action.id,
-        end: s.time + (s.upgrades.includes("press") ? 7 : E.productionSeconds),
+        end:
+          s.time +
+          (s.upgrades.includes("press") ? 7 : E.productionSeconds) +
+          (design.finish === "premium" ? 8 : 0),
       });
       break;
+    }
     case "post": {
       check(
         s.designs.some((d) => d.stock > 0),
@@ -559,9 +688,16 @@ export function tick(state: Game, seconds = 1): Game {
       if (d) {
         const quantity = j.quantity ?? 1;
         if (j.kind === "prototype") d.prototypeApproved = true;
-        else if (j.kind === "contract")
-          d.rawStock = (d.rawStock || 0) + quantity;
-        else {
+        else if (j.kind === "contract") {
+          s.deliveries ??= [];
+          s.deliveries.push({
+            id: id(s),
+            item: "batch",
+            quantity,
+            designId: d.id,
+            arrives: s.time + 8,
+          });
+        } else {
           d.stock += quantity;
           task(s, "produce");
         }
@@ -577,6 +713,7 @@ export function tick(state: Game, seconds = 1): Game {
       s.reputation = Math.min(100, s.reputation + 1);
     }
     if (
+      s.storeOpen !== false &&
       s.demand > 0 &&
       s.time - s.lastDemand >= 10 &&
       s.orders.filter((o) => o.status !== "delivered").length < 10
@@ -584,7 +721,9 @@ export function tick(state: Game, seconds = 1): Game {
       s.lastDemand = s.time;
       const d = s.designs.find(
         (d) =>
-          d.stock > 0 && d.price <= productOf(d).budget + s.reputation * 80,
+          (!s.listed || s.listed.includes(d.id)) &&
+          d.stock > 0 &&
+          d.price <= productOf(d).budget + s.reputation * 80,
       );
       if (d) {
         d.stock--;

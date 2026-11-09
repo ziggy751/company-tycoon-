@@ -1,3 +1,4 @@
+import { useGame } from "../game/store";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { safeCameraPosition } from "./camera";
@@ -10,7 +11,7 @@ export function CameraCollision() {
     scene.traverse((o) => {
       if (o.userData.cameraSolid) objects.push(o);
     });
-    camera.position.copy(
+    if (useGame.getState().panel !== "computer") camera.position.copy(
       safeCameraPosition(orbit.target, camera.position, objects),
     );
     const pose = [...camera.position.toArray(), ...orbit.target.toArray()]

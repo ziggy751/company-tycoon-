@@ -1,6 +1,6 @@
 # Company Tycoon
 
-A playable, offline-first 3D streetwear business simulator. This chapter implements three distinct starter-business loops and earned garage expansion, not the full city/factory roadmap.
+An offline-first 3D company simulator with three starter industries, 25 product types, physical workstations, a fictional computer desktop and earned garage expansion. The full city/factory roadmap remains in progress.
 
 ## Develop
 
@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open the address printed by Vite. No API keys, backend, downloaded art, or external runtime services are required. IndexedDB holds saves in the current browser and origin. Export saves before changing origins or clearing browser storage.
+Open the address printed by Vite. No API keys, backend or external runtime services are required to play; shipped art is bundled locally. IndexedDB holds saves in the current browser and origin. Export saves before changing origins or clearing browser storage.
 
 ```sh
 npm test                  # deterministic economy and save validation
@@ -25,21 +25,21 @@ Browser tests default to `/usr/bin/chromium`. Set `CHROMIUM_PATH` to another ins
 ## First sale
 
 1. Select Create Company, choose Streetwear & Clothing, and create a brand.
-2. Design: customise the 3D shirt, then save it as a product.
-3. Produce: print a shirt. One blank and $4 ink are consumed; wait 12 simulation seconds.
-4. SocialHub: publish a $5 promotional post while finished stock is available.
-5. Orders: wait for a customer, then pack the order and ship for $5.
-6. On delivery, receive payment. Buy more supplies and improve the workspace.
+2. Walk to the back-left desk (approach its right side), press E or click the nearby prompt, then open Design Studio on SummitOS. Save a cotton tee design.
+3. Escape exits the computer. Walk to the back-right manufacturing bench and print the tee. One blank and $4 ink are consumed; wait 12 simulation seconds.
+4. Return to the computer and open SocialHub. Publish a $5 promotional post while finished stock is available.
+5. Use the front-right packing station. Wait for a customer, consume a mailer to pack the order, then ship for $5.
+6. On delivery, receive payment. Order supplies in Supplier Market, receive the timed delivery at the front door, and plan upgrades in Property.
 
-A product priced above the current audience's budget will not sell. Reprice in the Design catalogue. The default $39 works for the starting audience. A promotion can generate up to three orders if inventory remains available. Repeated posts have a 35-second cooldown.
+A product priced above the current audience's budget will not sell. Reprice in Design Studio or Product Catalogue on the computer. The default $39 works for the starting audience. A promotion can generate up to three orders if inventory remains available. Repeated posts have a 35-second cooldown.
 
-WASD moves, Shift sprints, Space hops, dragging orbits, scrolling zooms, E uses a nearby station, Tab opens the phone, I opens inventory, B opens workspace, M opens the neighbourhood map, and Esc closes a panel or opens settings. Clickable station labels and the dock provide trackpad-friendly alternatives.
+WASD moves, Shift sprints, Space hops, dragging orbits, scrolling zooms, and E uses a nearby object. Tab, I and B open SocialHub, Supplier Market and Property respectively when near a computer. Within the computer, Tab retains normal keyboard focus behavior. M opens the neighbourhood map; Escape exits the computer, closes a panel or opens settings. Every interaction has a nearby clickable prompt. The permanent business dock has been removed. Key bindings and mouse/trackpad sensitivity are configurable.
 
 Autosave runs after transactions and every 10 simulation seconds. Three manual slots, JSON export/import, and save validation are available in Settings → Manage saves. Simulation does not advance while the page is hidden or while save/settings panels are open. No offline income is invented.
 
-## Cloudflare Pages
+## Cloudflare Pages / Workers static assets
 
-Choose this repository, build command `npm run build`, output directory `dist`, Node 22 or 24. This is a static SPA with no server secrets or Workers required. All assets are bundled. Save data stays on the device; there is no cloud sync. No deployment has been performed by this implementation.
+Choose this repository, build command `npm run build`, output directory `dist`, Node 22 or 24. This is a static SPA; this gameplay release does not add a server or require server secrets. All assets are bundled. Save data stays on the device; there is no cloud sync. Git-connected Cloudflare projects can build updates automatically. Live deployment verification is blocked by this environment's network proxy (403 on the Workers URL).
 
 ## Structure
 
@@ -55,7 +55,7 @@ See GAME_PROGRESS.md, GAME_DESIGN.md and BALANCING.md for scope and extension po
 
 ## Company Tycoon update
 
-The latest increment adds a grounded home/neighbourhood, walkable entrance, usable door, day/night and interior lights, wardrobe samples, and independent companies. Use **My Companies** on the main menu to switch businesses. Opening the wardrobe requires a manufactured sample to wear your design; that piece moves out of saleable stock. Existing IndexedDB saves migrate without deleting the originals. See OVERHAUL_PROGRESS.md for exact scope and unfinished roadmap.
+Earlier increments added a grounded home/neighbourhood, walkable entrance, usable door, day/night and interior lights, wardrobe samples, and independent companies. Use **My Companies** on the main menu to switch businesses. Opening the wardrobe requires a manufactured sample to wear your design; that piece moves out of saleable stock. Existing IndexedDB saves migrate without deleting the originals. See OVERHAUL_PROGRESS.md for exact scope and unfinished roadmap.
 
 ## Three playable industries
 
@@ -63,4 +63,12 @@ Use **Create Company** and choose Streetwear, MTB Accessories or Hair & Styling 
 
 The optional tutorial awards a single $100 grant after eleven real tasks. A gated garage purchase expands the world workspace, storage and sourced batch size. M opens the neighbourhood map. Settings includes control rebinding, mouse/trackpad and sensitivity controls. Primary click/drag and scroll cover all camera interactions.
 
-See INDUSTRIES_RELEASE.md for a precise completion report, BALANCING.md for costs, and ASSETS.md for the locally bundled CC0 chair. To run production browser tests, build first and use `TEST_PRODUCTION=1 npm run test:browser`. Firefox/WebKit browser binaries must be installed separately where network policy and OS support permit; the supplied default config uses system Chromium.
+See DESKTOP_RELEASE.md and OVERHAUL_PROGRESS.md for the current completion report, INDUSTRIES_RELEASE.md for the earlier release, BALANCING.md for costs, and ASSETS.md for the locally bundled CC0 chair. To run production browser tests, build first and use `TEST_PRODUCTION=1 npm run test:browser`. Firefox/WebKit browser binaries must be installed separately where network policy and OS support permit; the supplied default config uses system Chromium.
+
+## SummitOS and catalogue expansion
+
+The physical computer opens draggable, minimisable business apps. Drafts survive minimising, Show Desktop exposes other apps, and Escape restores the world camera. Manufacturing, inspection, labelling, deliveries and dispatch have physical stations. Supplier batches must be received before preparation and sale.
+
+The catalogue contains 8 streetwear types, 9 MTB accessories and 8 hair accessories, with product-specific costs/times, shaped previews, collection/season metadata, premium finishing, favourites and comparison. Tees use the press; other apparel uses specialist textile production plus inspection. Only the original tee family is currently wearable; the broader character clothing system is unfinished.
+
+Email login/D1 remains separate unfinished work on `feature/email-cloud-saves`. Main uses the existing independent local saves and preserves the original database and export/import format.

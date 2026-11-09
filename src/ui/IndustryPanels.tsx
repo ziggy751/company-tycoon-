@@ -5,6 +5,7 @@ import { useGame } from "../game/store";
 import {
   industryOf,
   productOf,
+  supplierUnitCost,
   PRODUCTS,
   type ProductKind,
 } from "../game/industries";
@@ -12,18 +13,24 @@ import { money } from "../game/catalog";
 import type { Design, Action } from "../game/simulation";
 import { capacity, occupied } from "../game/simulation";
 import { ProductModel } from "../world/ProductModel";
-export function IndustryDesigner() {
+export function IndustryDesigner({
+  initialKind,
+  active = true,
+}: {
+  initialKind?: ProductKind;
+  active?: boolean;
+}) {
   const g = useGame((s) => s.game)!;
   const industry = industryOf(g);
   const [d, setD] = useState<Omit<Design, "id" | "stock">>({
-    kind: industry.products[0],
-    name: PRODUCTS[industry.products[0]].name,
+    kind: initialKind || industry.products[0],
+    name: PRODUCTS[initialKind || industry.products[0]].name,
     color: industry.id === "mtb" ? "#506e73" : "#b28b72",
     ink: "#2e3f39",
     text: g.brand,
     fit: "Regular",
     graphic: "type",
-    price: PRODUCTS[industry.products[0]].price,
+    price: PRODUCTS[initialKind || industry.products[0]].price,
   });
   const [saved, setSaved] = useState(false);
   const set = (value: Partial<typeof d>) => {
@@ -34,7 +41,11 @@ export function IndustryDesigner() {
     <>
       <div className="garment-preview">
         <span className="preview-label">ACTUAL PRODUCT / DRAG TO ROTATE</span>
-        <Canvas camera={{ position: [0, 0.2, 3.6], fov: 42 }} dpr={1}>
+        <Canvas
+          frameloop={active ? "demand" : "never"}
+          camera={{ position: [0, 0.2, 3.6], fov: 42 }}
+          dpr={1}
+        >
           <color attach="background" args={["#deded3"]} />
           <ambientLight intensity={1.8} />
           <directionalLight position={[3, 4, 5]} intensity={3} />
@@ -70,6 +81,73 @@ export function IndustryDesigner() {
           ))}
         </select>
       </label>
+      <label>
+        Collection
+        <input
+          maxLength={32}
+          value={d.collection || ""}
+          placeholder="e.g. Studio essentials"
+          onChange={(e) => set({ collection: e.target.value })}
+        />
+      </label>
+      <div className="two-col">
+        <label>
+          Release season
+          <select
+            value={d.season || "All year"}
+            onChange={(e) =>
+              set({ season: e.target.value as Design["season"] })
+            }
+          >
+            {["All year", "Spring", "Summer", "Autumn", "Winter"].map((x) => (
+              <option key={x}>{x}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Finish
+          <select
+            value={d.finish || "standard"}
+            onChange={(e) =>
+              set({ finish: e.target.value as Design["finish"] })
+            }
+          >
+            <option value="standard">Standard</option>
+            <option value="premium">Premium · +25% material cost, +8s</option>
+          </select>
+        </label>
+      </div>
+      {industry.id === "streetwear" &&
+        ["shirt", "longsleeve", "hoodie", "crewneck"].includes(
+          d.kind || "shirt",
+        ) && (
+          <>
+            <label>
+              Fit
+              <select
+                value={d.fit}
+                onChange={(e) => set({ fit: e.target.value as Design["fit"] })}
+              >
+                {["Regular", "Oversized", "Boxy"].map((x) => (
+                  <option key={x}>{x}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Graphic
+              <select
+                value={d.graphic}
+                onChange={(e) =>
+                  set({ graphic: e.target.value as Design["graphic"] })
+                }
+              >
+                <option value="type">Typography</option>
+                <option value="orbit">Orbital mark</option>
+                <option value="none">No graphic</option>
+              </select>
+            </label>
+          </>
+        )}
       <label>
         Product name
         <input
@@ -117,11 +195,13 @@ export function IndustryDesigner() {
         />
       </label>
       <p className="muted">
-        {productOf(d).material}. Supplier unit cost{" "}
-        {money(productOf(d).unitCost)}.{" "}
+        {productOf(d).material}. Supplier unit cost {money(supplierUnitCost(d))}
+        .{" "}
         {industry.id === "mtb"
           ? "A $15 prototype is required for each new design."
-          : "Apply one paper label and $1.50 presentation per sourced item."}{" "}
+          : industry.id === "haircare"
+            ? "Apply one paper label and $1.50 presentation per sourced item."
+            : "Tees use your press; other clothing is professionally sewn, then received and inspected."}{" "}
         Packaging and shipping cost $7 per order.
       </p>
       <button
@@ -219,12 +299,6 @@ export function IndustryProduction() {
           {industry.id === "mtb" &&
             !d.prototypeApproved &&
             button("prototype", d.id, "Make & approve prototype · $15")}
-          {(industry.id === "haircare" || d.prototypeApproved) &&
-            button(
-              "contract",
-              d.id,
-              `${industry.id === "mtb" ? "Contract" : "Source"} ${g.property === "garage" ? 6 : 3} pieces · ${money(productOf(d).unitCost * (g.property === "garage" ? 6 : 3))}`,
-            )}
           {industry.id === "mtb" &&
             button("inspect", d.id, "Inspect incoming batch", !d.rawStock)}
           {industry.id === "haircare" &&
@@ -248,69 +322,6 @@ export function IndustryProduction() {
       >
         Packaging & supplies →
       </button>
-    </>
-  );
-}
-export function IndustryInventory() {
-  const g = useGame((s) => s.game)!,
-    i = industryOf(g),
-    dispatch = useGame((s) => s.dispatch);
-  return (
-    <>
-      <div className="feature-card">
-        <span className="eyebrow">{i.supplier}</span>
-        <h2>A reliable supply chain.</h2>
-        <p>
-          Order product-specific batches from Production. Supplies below are
-          purchased separately.
-        </p>
-      </div>
-      <h3>FULFILMENT SUPPLIES</h3>
-      {[
-        {
-          item: "packaging" as const,
-          name: "Protective mailers",
-          count: g.packaging,
-          cost: 200,
-        },
-        ...(i.id === "haircare"
-          ? [
-              {
-                item: "labels" as const,
-                name: "Paper product labels",
-                count: g.labels || 0,
-                cost: 50,
-              },
-            ]
-          : []),
-      ].map((p) => (
-        <article className="supply" key={p.item}>
-          <div className="row">
-            <strong>{p.name}</strong>
-            <b>{p.count} on hand</b>
-          </div>
-          <button
-            className="primary full"
-            onClick={() => dispatch({ type: "buy", item: p.item, quantity: 5 })}
-          >
-            Buy 5 · {money(p.cost * 5)}
-          </button>
-        </article>
-      ))}
-      <h3>
-        ALL PRODUCT STOCK{" "}
-        <span>
-          {occupied(g)}/{capacity(g)}
-        </span>
-      </h3>
-      {g.designs.map((d) => (
-        <div className="row" key={d.id}>
-          <strong>{d.name}</strong>
-          <span>
-            {d.rawStock || 0} incoming · {d.stock} ready
-          </span>
-        </div>
-      ))}
     </>
   );
 }

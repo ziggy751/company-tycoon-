@@ -1,3 +1,4 @@
+import { Graphics } from "./Graphics";
 import { Controls } from "./Controls";
 import { useGame } from "../game/store";
 export function MenuPreferences({ close }: { close: () => void }) {
@@ -18,18 +19,7 @@ export function MenuPreferences({ close }: { close: () => void }) {
           Device preferences apply to all companies. Opening settings does not
           create or load a business.
         </p>
-        <label>
-          Rendering quality
-          <select
-            value={s.quality}
-            onChange={(e) =>
-              configure({ quality: e.target.value as typeof s.quality })
-            }
-          >
-            <option value="low">Low</option>
-            <option value="high">High</option>
-          </select>
-        </label>
+        <Graphics />
         <label>
           Camera sensitivity
           <input

@@ -1,6 +1,7 @@
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import type { Design } from "../game/simulation";
+import { CatalogueModel } from "./CatalogueModels";
 import { Garment } from "./Garment";
 function Branding({ d }: { d: Pick<Design, "text" | "ink"> }) {
   const texture = useMemo(() => {
@@ -139,6 +140,7 @@ export function ProductModel({
           </mesh>
         </group>
       )}
+      {!["frame-kit","mudguard","comb","claw-clip"].includes(d.kind!) && <CatalogueModel d={d}/>}
       <Branding d={d} />
     </group>
   );

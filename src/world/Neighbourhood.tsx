@@ -1,4 +1,3 @@
-import { Html } from "@react-three/drei";
 import { useGame } from "../game/store";
 import { surface } from "./materials";
 function Block({
@@ -23,12 +22,16 @@ function Block({
       onClick={onClick}
     >
       <boxGeometry args={s} />
-      <meshStandardMaterial
-        color={c}
-        {...surface(mat)}
-        bumpScale={0.035}
-        roughness={0.85}
-      />
+      {useGame.getState().settings.quality === "low" ? (
+        <meshLambertMaterial color={c} />
+      ) : (
+        <meshStandardMaterial
+          color={c}
+          {...surface(mat)}
+          bumpScale={0.035}
+          roughness={0.85}
+        />
+      )}
     </mesh>
   );
 }
@@ -58,7 +61,6 @@ function Tree({ x, z }: { x: number; z: number }) {
 export function Neighbourhood() {
   const g = useGame((s) => s.game)!;
   const dispatch = useGame((s) => s.dispatch);
-  const open = useGame((s) => s.open);
   const outside = Math.abs(g.player[0]) > 5 || g.player[1] > 10;
   const cut = outside ? 3.4 : 0.65;
   return (
@@ -69,12 +71,16 @@ export function Neighbourhood() {
         receiveShadow
       >
         <planeGeometry args={[160, 160]} />
-        <meshStandardMaterial
-          color="#7e8b5f"
-          {...surface("grass")}
-          bumpScale={0.07}
-          roughness={1}
-        />
+        {useGame.getState().settings.quality === "low" ? (
+          <meshLambertMaterial color="#7e8b5f" />
+        ) : (
+          <meshStandardMaterial
+            color="#7e8b5f"
+            {...surface("grass")}
+            bumpScale={0.07}
+            roughness={1}
+          />
+        )}
       </mesh>
       <Block p={[0, -0.1, 7]} s={[10, 0.2, 6]} c="#b2a48b" mat="timber" />
       <Block p={[0, -0.25, 3]} s={[10.5, 0.3, 14.5]} c="#aaa494" />
@@ -93,7 +99,7 @@ export function Neighbourhood() {
       <group
         position={[-1, 0, 4]}
         rotation={[0, g.doorOpen ? -Math.PI * 0.5 : 0, 0]}
-        onClick={() => dispatch({ type: "door" })}
+        onClick={() => useGame.getState().interact("door")}
       >
         <Block p={[1, 1.4, 0]} s={[2, 2.8, 0.1]} c="#86715a" mat="timber" />
         <mesh position={[1.8, 1.35, 0.1]} rotation={[Math.PI / 2, 0, 0]}>
@@ -105,14 +111,6 @@ export function Neighbourhood() {
           />
         </mesh>
       </group>
-      <Html position={[0, 2.8, 4]} center distanceFactor={16}>
-        <button
-          className="world-label"
-          onClick={() => dispatch({ type: "door" })}
-        >
-          {g.doorOpen ? "Close" : "Open"} bedroom door
-        </button>
-      </Html>
       {[-3, 3].map((x) => (
         <Block
           key={x}
@@ -148,13 +146,8 @@ export function Neighbourhood() {
         s={[0.8, 2.4, 1]}
         c="#9d8871"
         mat="timber"
-        onClick={() => open("wardrobe")}
+        onClick={() => useGame.getState().interact("wardrobe")}
       />
-      <Html position={[-4.2, 2.7, 8.7]} center distanceFactor={16}>
-        <button className="world-label" onClick={() => open("wardrobe")}>
-          Wardrobe
-        </button>
-      </Html>
       <Block
         p={[-0.8, 1.3, 3.88]}
         s={[0.12, 0.18, 0.06]}

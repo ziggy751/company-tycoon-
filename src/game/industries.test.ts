@@ -19,6 +19,7 @@ import {
 import { validateSave } from "./save";
 function product(industry: IndustryId, kind: ProductKind) {
   let g = newGame("TEST", "", "#d9ed91", "Independent", "#a77c62", industry);
+  g.reputation = PRODUCTS[kind].unlockReputation;
   return act(g, {
     type: "design",
     design: {
@@ -35,11 +36,12 @@ function product(industry: IndustryId, kind: ProductKind) {
 }
 function source(g: Game) {
   const id = g.designs[0].id;
-  if (!g.industry || g.industry === "streetwear")
+  if (PRODUCTS[g.designs[0].kind||"shirt"].method === "transfer")
     return tick(act(g, { type: "produce", id }), 12);
   if (g.industry === "mtb") g = tick(act(g, { type: "prototype", id }), 12);
-  g = tick(act(g, { type: "contract", id }), 40);
-  return g.industry === "mtb"
+  g = tick(act(g, { type: "contract", id }), 60);
+  g = act(g,{type:"receive",id:g.deliveries![0].id});
+  return g.industry !== "haircare"
     ? tick(act(g, { type: "inspect", id }), 10)
     : tick(act(g, { type: "label", id }), 6);
 }
@@ -70,7 +72,8 @@ it("MTB cannot skip prototyping, contract payment, incoming inspection or capaci
   expect(g.cash).toBe(50000 - 1500 - 3 * 450);
   expect(g.designs[0].stock).toBe(0);
   expect(occupied(g)).toBe(3);
-  g = tick(g, 25);
+  g = tick(g, 33);
+  g = act(g,{type:"receive",id:g.deliveries![0].id});
   expect(g.designs[0].rawStock).toBe(3);
   expect(g.designs[0].stock).toBe(0);
   expect(() => act(g, { type: "post", caption: "no QC" })).toThrow("saleable");
@@ -84,7 +87,8 @@ it("hair accessories consume sourced items and actual labels instead of shirt bl
     id = g.designs[0].id;
   expect(g.blanks).toBe(0);
   expect(() => act(g, { type: "label", id })).toThrow("Source");
-  g = tick(act(g, { type: "contract", id }), 20);
+  g = tick(act(g, { type: "contract", id }), 28);
+  g = act(g,{type:"receive",id:g.deliveries![0].id});
   g = act(g, { type: "label", id });
   expect(g.labels).toBe(4);
   expect(g.designs[0].rawStock).toBe(2);

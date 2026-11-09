@@ -13,3 +13,8 @@ it("substeps low-frame-rate movement so elapsed time does not permit tunnelling"
   expect(movePlayer([0, 3], 0, 3, false)[1]).toBeLessThan(3.66);
   expect(movePlayer([0, 3], 0, 10, true)[1]).toBeCloseTo(13);
 });
+
+it("garage computer desk stays solid while its interaction point is accessible", () => {
+  expect(blocked(30, -18, true)).toBe(true);
+  expect(blocked(30, -17.3, true)).toBe(false);
+});

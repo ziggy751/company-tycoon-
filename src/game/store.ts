@@ -3,20 +3,26 @@ import {
   normalizeControls,
   type ControlSettings,
 } from "./controls";
+import { GRAPHICS, type Graphics } from "./graphics";
 import { create } from "zustand";
 import { act, tick, type Action, type Game } from "./simulation";
 import { saveGame } from "./save";
-type Settings = ControlSettings & {
-  quality: "low" | "high";
-  sensitivity: number;
-  volume: number;
-  firstPerson: boolean;
-  invert: boolean;
-};
+type Settings = ControlSettings &
+  Graphics & {
+    sensitivity: number;
+    volume: number;
+    firstPerson: boolean;
+    invert: boolean;
+  };
 type Store = {
   game: Game | null;
   playing: boolean;
+  worldEpoch: number;
   panel: string | null;
+  interaction: string | null;
+  desktopApp: string | null;
+  desktopFocused: string | null;
+  interact: (expected?: string) => void;
   paused: boolean;
   speed: number;
   notice: string;
@@ -34,36 +40,73 @@ let saveQueue = Promise.resolve();
 export const useGame = create<Store>((set, get) => ({
   game: null,
   playing: false,
+  worldEpoch: 0,
+  desktopApp: null,
+  desktopFocused: null,
   panel: null,
+  interaction: null,
   paused: false,
   speed: 1,
   notice: "",
   saveStatus: "Not saved yet",
   settings: {
     ...DEFAULT_CONTROLS,
-    quality: "high",
+    ...GRAPHICS.high,
     sensitivity: 1,
     volume: 0.15,
     firstPerson: false,
     invert: false,
   },
   setGame: (g) =>
-    set({
+    set((state) => ({
+      worldEpoch: state.worldEpoch + 1,
       game: { ...g, companyId: g.companyId || crypto.randomUUID() },
       panel: null,
+      interaction: null,
+      desktopApp: null,
+      desktopFocused: null,
       paused: false,
-    }),
+    })),
+  interact: (expected) => {
+    const s = get();
+    if (
+      !s.playing ||
+      s.panel ||
+      !s.interaction ||
+      (expected && expected !== s.interaction)
+    )
+      return;
+    if (s.interaction === "door" || s.interaction === "lights")
+      s.dispatch({ type: s.interaction });
+    else s.open(s.interaction);
+  },
   open: (panel) => {
+    if (
+      panel &&
+      ["design", "inventory", "finances", "social", "upgrades"].includes(panel)
+    ) {
+      if (get().panel === "computer") set({ desktopApp: panel });
+      else get().notify("Use the computer at your desk to open business apps.");
+      return;
+    }
+    if (
+      get().panel === "computer" &&
+      panel &&
+      ["settings", "saves"].includes(panel)
+    ) {
+      set({ desktopApp: panel });
+      return;
+    }
     const g = get().game;
     if (
       g &&
       g.onboarding?.mode === "active" &&
-      (panel === "design" || panel === "finances")
+      (panel === "design" || panel === "computer" || panel === "finances")
     ) {
       set({
         game: act(g, {
           type: "tutorial-event",
-          task: panel === "design" ? "computer" : "finances",
+          task: panel === "finances" ? "finances" : "computer",
         }),
         panel,
       });
@@ -72,14 +115,30 @@ export const useGame = create<Store>((set, get) => ({
   },
   notify: (notice) => set({ notice }),
   configure: (s) => {
-    const next = { ...get().settings, ...s };
+    const next = {
+      ...get().settings,
+      ...(s.quality ? GRAPHICS[s.quality] : {}),
+      ...s,
+    };
+    next.renderScale = Math.max(
+      0.75,
+      Math.min(2, Number(next.renderScale) || 1),
+    );
     set({ settings: { ...next, ...normalizeControls(next) } });
   },
   dispatch: (a) => {
     try {
       const g = get().game;
       if (!g) return false;
-      set({ game: act(g, a), notice: "", saveStatus: "Saving…" });
+      const next = act(g, a);
+      set({
+        game: next,
+        notice: "",
+        saveStatus: "Saving…",
+        ...(next.property !== g.property
+          ? { panel: null, interaction: null, desktopFocused: null }
+          : {}),
+      });
       void get().save();
       return true;
     } catch (e) {
@@ -88,10 +147,14 @@ export const useGame = create<Store>((set, get) => ({
     }
   },
   step: () => {
-    const { game, paused, speed, panel } = get();
+    const { game, paused, speed, panel, desktopFocused } = get();
     if (
       game &&
       !paused &&
+      !(
+        panel === "computer" &&
+        ["settings", "saves"].includes(desktopFocused || "")
+      ) &&
       panel !== "settings" &&
       panel !== "saves" &&
       panel !== "account"

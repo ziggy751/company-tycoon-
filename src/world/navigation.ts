@@ -27,6 +27,7 @@ export function blocked(x: number, z: number, doorOpen: boolean) {
     if (x < 24.3 || x > 35.7 || z < -18.7) return true;
     if (z > -9.3 && Math.abs(x - 30) > 1.2) return true;
     if (x > 25 && x < 29 && z > -18 && z < -15.2) return true;
+    if (x > 29 && x < 31 && z > -18.7 && z < -17.55) return true; // computer desk
     if (x > 31 && x < 35 && z > -13 && z < -11) return true;
     if (x > 32.8 && x < 35.2 && z > -17.2 && z < -14.8) return true;
   }

@@ -1,25 +1,22 @@
+import { Graphics } from "./Graphics";
+import { SupplierApp, ReceivingPanel } from "./BusinessApps";
 import {
   industryOf,
+  productOf,
   industryUpgrades,
   TUTORIAL_TASKS,
 } from "../game/industries";
-import {
-  IndustryDesigner,
-  IndustryProduction,
-  IndustryInventory,
-} from "./IndustryPanels";
+import { IndustryDesigner, IndustryProduction } from "./IndustryPanels";
 import { WorldMap } from "./WorldMap";
 import { garageReady } from "../game/simulation";
 import { Controls } from "./Controls";
 import { Wardrobe } from "./Wardrobe";
-import { useState, useEffect, Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls, ContactShadows } from "@react-three/drei";
+import { useState, useEffect } from "react";
+
 import {
   ArrowUpRight,
   Check,
   Package,
-  Plus,
   ShoppingBag,
   Truck,
   Play,
@@ -31,17 +28,11 @@ import {
 } from "lucide-react";
 import { useGame } from "../game/store";
 import { Garment } from "../world/Garment";
-import { ECONOMY as E, FITS, money, UPGRADES } from "../game/catalog";
-import {
-  completed,
-  revenue,
-  expenses,
-  capacity,
-  occupied,
-  type Design,
-} from "../game/simulation";
+import { ECONOMY as E, money } from "../game/catalog";
+import { completed, revenue, expenses, type Design } from "../game/simulation";
 import { loadGame, listSaves, validateSave, saveGame } from "../game/save";
 export const PANEL_TITLES: Record<string, [string, string]> = {
+  receiving: ["FRONT DOOR", "Delivery area"],
   map: ["YOUR NEIGHBOURHOOD", "World map"],
   wardrobe: ["YOUR OWN LABEL", "Wardrobe & home"],
   design: ["01 / CREATIVE", "Design studio"],
@@ -54,175 +45,6 @@ export const PANEL_TITLES: Record<string, [string, string]> = {
   settings: ["MAKE YOURSELF AT HOME", "Settings"],
   saves: ["LOCAL TO THIS BROWSER", "Save journal"],
 };
-export function DesignPanel() {
-  const g = useGame((s) => s.game)!;
-  const dispatch = useGame((s) => s.dispatch);
-  const [d, setD] = useState<Omit<Design, "id" | "stock">>({
-    name: "Studio tee 01",
-    color: "#e6e1ce",
-    ink: "#283d32",
-    text: g.brand,
-    fit: "Oversized",
-    graphic: "orbit",
-    price: 3900,
-  });
-  const [saved, setSaved] = useState(false);
-  const update = (v: Partial<typeof d>) => {
-    setD({ ...d, ...v });
-    setSaved(false);
-  };
-  return (
-    <>
-      <div className="garment-preview">
-        <span className="preview-label">LIVE SAMPLE / DRAG TO ROTATE</span>
-        <Canvas camera={{ position: [0, 0.2, 3.4], fov: 42 }} dpr={[1, 1.5]}>
-          <color attach="background" args={["#deded3"]} />
-          <ambientLight intensity={2} />
-          <directionalLight position={[3, 5, 4]} intensity={3} />
-          <Suspense fallback={null}>
-            <Garment design={d} />
-          </Suspense>
-          <ContactShadows
-            position={[0, -1, 0]}
-            opacity={0.25}
-            scale={5}
-            blur={2}
-            far={3}
-          />
-          <OrbitControls enablePan={false} minDistance={2} maxDistance={5} />
-        </Canvas>
-        <span className="preview-caption">100% cotton · heat transfer</span>
-      </div>
-      <div className="fields">
-        <label>
-          Product name
-          <input
-            maxLength={40}
-            value={d.name}
-            onChange={(e) => update({ name: e.target.value })}
-          />
-        </label>
-        <div className="two-col">
-          <label>
-            Silhouette
-            <select
-              value={d.fit}
-              onChange={(e) => update({ fit: e.target.value as Design["fit"] })}
-            >
-              {FITS.map((f) => (
-                <option key={f}>{f}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Retail price ($)
-            <input
-              type="number"
-              min="1"
-              max="500"
-              step="1"
-              value={d.price / 100}
-              onChange={(e) =>
-                update({ price: Math.round(Number(e.target.value) * 100) })
-              }
-            />
-          </label>
-        </div>
-        <div className="two-col">
-          <label>
-            Fabric colour
-            <input
-              aria-label="Fabric colour"
-              type="color"
-              value={d.color}
-              onChange={(e) => update({ color: e.target.value })}
-            />
-          </label>
-          <label>
-            Print colour
-            <input
-              aria-label="Print colour"
-              type="color"
-              value={d.ink}
-              onChange={(e) => update({ ink: e.target.value })}
-            />
-          </label>
-        </div>
-        <label>
-          Graphic style
-          <select
-            value={d.graphic}
-            onChange={(e) =>
-              update({ graphic: e.target.value as Design["graphic"] })
-            }
-          >
-            <option value="orbit">Orbital mark + typography</option>
-            <option value="type">Typography</option>
-            <option value="none">Blank / no graphic</option>
-          </select>
-        </label>
-        <label>
-          Print text
-          <input
-            maxLength={24}
-            value={d.text}
-            onChange={(e) => update({ text: e.target.value })}
-          />
-        </label>
-      </div>
-      <div className="cost-note">
-        <span>Direct cost / shirt</span>
-        <strong>{money(E.blank + E.ink + E.packaging + E.shipping)}</strong>
-      </div>
-      <p className="muted">
-        Includes blank, printing, mailer and postage. Your own labour is unpaid
-        in the bedroom stage. High prices reduce demand.
-      </p>
-      <button
-        className="primary full"
-        onClick={() => {
-          if (dispatch({ type: "design", design: d })) setSaved(true);
-        }}
-      >
-        {saved ? <Check size={16} /> : <Plus size={16} />}{" "}
-        {saved ? "Sample saved — ready to produce" : "Save as new product"}
-      </button>
-      {g.designs.length > 0 && (
-        <>
-          <h3>
-            YOUR CATALOGUE <span>{g.designs.length}</span>
-          </h3>
-          {g.designs.map((p) => (
-            <div className="row" key={p.id}>
-              <div className="color-chip" style={{ background: p.color }} />
-              <div className="grow">
-                <strong>{p.name}</strong>
-                <small>
-                  {p.fit} · {p.stock} ready
-                </small>
-              </div>
-              <input
-                className="price-input"
-                aria-label={`Price for ${p.name}`}
-                type="number"
-                min="1"
-                max="500"
-                defaultValue={p.price / 100}
-                onBlur={(e) =>
-                  dispatch({
-                    type: "price",
-                    id: p.id,
-                    price: Math.round(Number(e.target.value) * 100),
-                  })
-                }
-              />
-            </div>
-          ))}
-        </>
-      )}
-    </>
-  );
-}
 export function ProductionPanel() {
   const g = useGame((s) => s.game)!;
   const dispatch = useGame((s) => s.dispatch);
@@ -236,11 +58,14 @@ export function ProductionPanel() {
           <br />
           Made by you.
         </h2>
-        <p>One heat press. A little patience. Something worth wearing.</p>
+        <p>
+          Print tees here. Receive and inspect professionally made apparel at
+          this bench.
+        </p>
         <div className={`machine-status ${job ? "active" : ""}`}>
           <i />
           {job
-            ? `Printing · ${Math.max(0, job.end - g.time)} seconds remaining`
+            ? `${job.kind === "contract" ? "Supplier production" : job.kind === "inspect" ? "Inspecting batch" : "Printing"} · ${Math.max(0, job.end - g.time)} seconds remaining`
             : "Heat press ready"}
         </div>
       </div>
@@ -262,18 +87,27 @@ export function ProductionPanel() {
             <div className="grow">
               <strong>{d.name}</strong>
               <small>
-                {money(E.ink)} ink ·{" "}
-                {g.upgrades.includes("press") ? 7 : E.productionSeconds}s · 1
-                blank
+                {productOf(d).method === "transfer"
+                  ? `${money(E.ink + (d.finish === "premium" ? Math.round(productOf(d).unitCost * 0.25) : 0))} printing · ${(g.upgrades.includes("press") ? 7 : E.productionSeconds) + (d.finish === "premium" ? 8 : 0)}s · 1 blank`
+                  : `${d.rawStock || 0} received · professional production · inspect before sale`}
               </small>
             </div>
             <button
               className="secondary"
-              disabled={!!job || !g.blanks}
-              onClick={() => dispatch({ type: "produce", id: d.id })}
+              disabled={
+                !!job ||
+                (productOf(d).method === "transfer" ? !g.blanks : !d.rawStock)
+              }
+              onClick={() =>
+                dispatch({
+                  type:
+                    productOf(d).method === "transfer" ? "produce" : "inspect",
+                  id: d.id,
+                })
+              }
             >
               <Play size={13} />
-              Print
+              {productOf(d).method === "transfer" ? "Print" : "Inspect batch"}
             </button>
           </div>
         ))
@@ -372,6 +206,7 @@ export function SocialPanel() {
   );
 }
 export function OrdersPanel() {
+  const physical = useGame((s) => s.panel === "orders");
   const g = useGame((s) => s.game)!;
   const dispatch = useGame((s) => s.dispatch);
   const active = g.orders.filter((o) => o.status !== "delivered");
@@ -409,7 +244,7 @@ export function OrdersPanel() {
                   ? `In transit · ${Math.max(0, o.arrives! - g.time)}s`
                   : o.status}
               </span>
-              {o.status === "ordered" && (
+              {physical && o.status === "ordered" && (
                 <button
                   className="secondary"
                   onClick={() => dispatch({ type: "pack", id: o.id })}
@@ -418,7 +253,7 @@ export function OrdersPanel() {
                   Pack order
                 </button>
               )}
-              {o.status === "packed" && (
+              {physical && o.status === "packed" && (
                 <button
                   className="primary"
                   onClick={() => dispatch({ type: "ship", id: o.id })}
@@ -438,92 +273,6 @@ export function OrdersPanel() {
           panel="social"
         />
       )}
-    </>
-  );
-}
-export function InventoryPanel() {
-  const g = useGame((s) => s.game)!;
-  const dispatch = useGame((s) => s.dispatch);
-  return (
-    <>
-      <div className="feature-card supplier">
-        <div className="eyebrow">COMMON THREAD SUPPLY CO.</div>
-        <h2>
-          The good stuff
-          <br />
-          starts here.
-        </h2>
-        <p>
-          Local blanks. Reliable basics. Instant supplier collection for this
-          first slice.
-        </p>
-      </div>
-      <h3>SUPPLIES</h3>
-      {(
-        [
-          {
-            id: "blanks",
-            name: "Cotton blanks",
-            cost: E.blank,
-            count: g.blanks,
-            desc: "Midweight cotton · unprinted",
-          },
-          {
-            id: "packaging",
-            name: "Recycled mailers",
-            cost: E.packaging,
-            count: g.packaging,
-            desc: "One per order · protective sleeve",
-          },
-        ] as const
-      ).map((i) => (
-        <div className="supply" key={i.id}>
-          <div className="row">
-            <div>
-              <strong>{i.name}</strong>
-              <small>{i.desc}</small>
-            </div>
-            <b>
-              {i.count}
-              <small>on hand</small>
-            </b>
-          </div>
-          <div className="row">
-            <span>{money(i.cost)} / unit</span>
-            <button
-              className="secondary"
-              onClick={() => dispatch({ type: "buy", item: i.id, quantity: 1 })}
-            >
-              Buy 1
-            </button>
-            <button
-              className="primary"
-              onClick={() => dispatch({ type: "buy", item: i.id, quantity: 5 })}
-            >
-              Buy 5 · {money(i.cost * 5)}
-            </button>
-          </div>
-        </div>
-      ))}
-      <h3>
-        GARMENT STORAGE{" "}
-        <span>
-          {occupied(g)} / {capacity(g)}
-        </span>
-      </h3>
-      <div className="progress">
-        <i style={{ width: `${(occupied(g) / capacity(g)) * 100}%` }} />
-      </div>
-      <p className="muted">
-        Includes blanks, work in progress, finished shirts and orders awaiting
-        shipment.
-      </p>
-      {g.designs.map((d) => (
-        <div className="row" key={d.id}>
-          <span>{d.name}</span>
-          <strong>{d.stock} available</strong>
-        </div>
-      ))}
     </>
   );
 }
@@ -560,6 +309,54 @@ export function FinancePanel() {
         Cash basis report. The initial $500 and starter supplies are a founder
         contribution, not sales. Net cash result expenses materials when
         purchased; inventory asset accounting and taxes come in later phases.
+      </p>
+      <h3>CASH FLOW · LAST 8 PERIODS</h3>
+      <svg
+        className="finance-chart"
+        viewBox="0 0 640 180"
+        role="img"
+        aria-label="Cash balance over eight recent periods"
+      >
+        {[40, 80, 120, 160].map((y) => (
+          <line
+            key={y}
+            x1="20"
+            x2="620"
+            y1={y}
+            y2={y}
+            stroke="currentColor"
+            opacity=".12"
+          />
+        ))}
+        {(() => {
+          const balances = Array.from(
+            { length: 8 },
+            (_, i) =>
+              50000 +
+              g.ledger
+                .filter((e) => e.time <= Math.max(0, g.time - 210 + i * 30))
+                .reduce((n, e) => n + e.amount, 0),
+          );
+          const min = Math.min(0, ...balances),
+            max = Math.max(50000, ...balances);
+          return (
+            <polyline
+              fill="none"
+              stroke="#a78bfa"
+              strokeWidth="3"
+              points={balances
+                .map(
+                  (n, i) =>
+                    `${20 + i * 85},${160 - ((n - min) / (max - min || 1)) * 140}`,
+                )
+                .join(" ")}
+            />
+          );
+        })()}
+      </svg>
+      <p className="muted">
+        Recorded cash balance in 30-second simulation periods. Includes
+        purchases, sales and grants.
       </p>
       <h3>TRANSACTION LEDGER</h3>
       {g.ledger.length ? (
@@ -691,20 +488,9 @@ export function SettingsPanel() {
     [slogan, setSlogan] = useState(g.slogan);
   return (
     <>
-      <p className="muted">The simulation pauses while settings are open.</p>
+      <p className="muted">The simulation pauses while settings are focused.</p>
       <h3>DISPLAY & CONTROLS</h3>
-      <label>
-        Rendering quality
-        <select
-          value={s.quality}
-          onChange={(e) =>
-            configure({ quality: e.target.value as typeof s.quality })
-          }
-        >
-          <option value="low">Low · 1× resolution, no shadows</option>
-          <option value="high">High · adaptive resolution, shadows</option>
-        </select>
-      </label>
+      <Graphics />
       <label>
         Trackpad / orbit sensitivity{" "}
         <input
@@ -730,7 +516,7 @@ export function SettingsPanel() {
           checked={s.firstPerson}
           onChange={(e) => configure({ firstPerson: e.target.checked })}
         />
-        First-person preview (fixed forward view)
+        First-person camera
       </label>
       <label>
         <Volume2 size={14} /> UI sound volume
@@ -950,16 +736,14 @@ function Empty({
 }
 export function PanelContent({ panel }: { panel: string }) {
   switch (panel) {
+    case "receiving":
+      return <ReceivingPanel />;
     case "map":
       return <WorldMap />;
     case "wardrobe":
       return <Wardrobe />;
     case "design":
-      return industryOf(useGame.getState().game!).id === "streetwear" ? (
-        <DesignPanel />
-      ) : (
-        <IndustryDesigner />
-      );
+      return <IndustryDesigner />;
     case "production":
       return industryOf(useGame.getState().game!).id === "streetwear" ? (
         <ProductionPanel />
@@ -971,11 +755,7 @@ export function PanelContent({ panel }: { panel: string }) {
     case "orders":
       return <OrdersPanel />;
     case "inventory":
-      return industryOf(useGame.getState().game!).id === "streetwear" ? (
-        <InventoryPanel />
-      ) : (
-        <IndustryInventory />
-      );
+      return <SupplierApp />;
     case "finances":
       return <FinancePanel />;
     case "upgrades":

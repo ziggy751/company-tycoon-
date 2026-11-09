@@ -103,6 +103,13 @@ export function validateSave(value: unknown): Game {
   if (
     g.designs.some(
       (d) =>
+        (d.collection !== undefined && !string(d.collection, 32)) ||
+        (d.season !== undefined &&
+          !["All year", "Spring", "Summer", "Autumn", "Winter"].includes(
+            d.season,
+          )) ||
+        (d.finish !== undefined &&
+          !["standard", "premium"].includes(d.finish)) ||
         !nonnegative(d.stock) ||
         !industryOf(g).products.includes(d.kind || "shirt") ||
         (d.rawStock !== undefined && !nonnegative(d.rawStock)) ||
@@ -122,6 +129,36 @@ export function validateSave(value: unknown): Game {
   )
     throw new Error("Invalid design data.");
   const designIds = new Set(g.designs.map((d) => d.id));
+  if (
+    g.deliveries !== undefined &&
+    (!Array.isArray(g.deliveries) ||
+      new Set(g.deliveries.map((d) => d.id)).size !== g.deliveries.length ||
+      g.deliveries.some(
+        (d) =>
+          !string(d.id) ||
+          !["blanks", "packaging", "labels", "batch"].includes(d.item) ||
+          !Number.isSafeInteger(d.quantity) ||
+          d.quantity < 1 ||
+          d.quantity > 60 ||
+          !nonnegative(d.arrives) ||
+          (d.item === "batch" && !designIds.has(d.designId!)),
+      ))
+  )
+    throw new Error("Invalid supplier deliveries.");
+  if (
+    g.favourites !== undefined &&
+    (!Array.isArray(g.favourites) ||
+      g.favourites.some((k) => !industryOf(g).products.includes(k)))
+  )
+    throw new Error("Invalid favourites.");
+  if (
+    (g.storeOpen !== undefined && typeof g.storeOpen !== "boolean") ||
+    (g.storeTheme !== undefined &&
+      !["midnight", "paper", "violet"].includes(g.storeTheme)) ||
+    (g.listed !== undefined &&
+      (!Array.isArray(g.listed) || g.listed.some((id) => !designIds.has(id))))
+  )
+    throw new Error("Invalid online store.");
   if (
     designIds.size !== g.designs.length ||
     new Set(g.orders.map((o) => o.id)).size !== g.orders.length ||
