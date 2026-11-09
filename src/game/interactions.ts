@@ -1,3 +1,4 @@
+import { handHint } from "./workshop";
 import type { Game } from "./simulation";
 export type Station = {
   id: string;
@@ -7,7 +8,21 @@ export type Station = {
   area: "bedroom" | "home" | "outside" | "garage";
 };
 export function stations(g: Game): Station[] {
-  return [
+  const list: Station[] = [
+    ...(g.workshop?.enabled
+      ? [
+          {
+            id: "shelf",
+            label: "Use Material & Inspection Shelf",
+            x: g.property === "garage" ? 30 : 1,
+            z: g.property === "garage" ? -14 : -0.1,
+            area:
+              g.property === "garage"
+                ? ("garage" as const)
+                : ("bedroom" as const),
+          },
+        ]
+      : []),
     {
       id: "computer",
       label: "Use Computer",
@@ -60,6 +75,17 @@ export function stations(g: Game): Station[] {
             z: -10,
             area: "garage" as const,
           },
+          ...(g.workshop?.enabled
+            ? [
+                {
+                  id: "receiving",
+                  label: "Shipping collection",
+                  x: 30,
+                  z: -10,
+                  area: "garage" as const,
+                },
+              ]
+            : []),
           {
             id: "computer",
             label: "Use Computer",
@@ -70,6 +96,10 @@ export function stations(g: Game): Station[] {
         ]
       : []),
   ];
+  return list.map((s) => ({
+    ...s,
+    label: handHint(g, s.id)?.label || s.label,
+  }));
 }
 // Room partitions are deliberately checked separately from furniture collision:
 // a workstation's interaction point is on the accessible side of its table.

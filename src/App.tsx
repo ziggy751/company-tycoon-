@@ -456,6 +456,25 @@ export default function App() {
               {stations(g).find((s) => s.id === interaction)?.label}
             </button>
           )}
+          {!panel && interaction && g.workshop?.enabled && (
+            <button
+              className="station-options"
+              onClick={() => open(interaction)}
+            >
+              Station options
+            </button>
+          )}
+          {g.workshop?.enabled && !panel && (
+            <div className="workshop-status" role="status">
+              {g.workshop.carry
+                ? `Carrying ${g.workshop.carry.kind}${g.workshop.carry.kind === "delivery" ? " · " + (g.deliveries?.find((d) => d.id === g.workshop!.carry!.id)?.quantity || "") + " " + (g.deliveries?.find((d) => d.id === g.workshop!.carry!.id)?.item || "") : ""}`
+                : "Hands free"}{" "}
+              ·{" "}
+              {g.workshop.press
+                ? `Press: ${g.workshop.press.stage}`
+                : "Shelf → press → inspection → packing → collection"}
+            </div>
+          )}
           <footer className="statusbar minimal-status">
             <span aria-live="polite">{status}</span>
             <button onClick={() => void useGame.getState().save()}>

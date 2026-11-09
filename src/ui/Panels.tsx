@@ -1,3 +1,4 @@
+import { WorkshopPanel } from "./Workshop";
 import { Graphics } from "./Graphics";
 import { SupplierApp, ReceivingPanel } from "./BusinessApps";
 import {
@@ -32,6 +33,7 @@ import { ECONOMY as E, money } from "../game/catalog";
 import { completed, revenue, expenses, type Design } from "../game/simulation";
 import { loadGame, listSaves, validateSave, saveGame } from "../game/save";
 export const PANEL_TITLES: Record<string, [string, string]> = {
+  shelf: ["STOCK & INSPECTION", "Material shelf"],
   receiving: ["FRONT DOOR", "Delivery area"],
   map: ["YOUR NEIGHBOURHOOD", "World map"],
   wardrobe: ["YOUR OWN LABEL", "Wardrobe & home"],
@@ -51,6 +53,7 @@ export function ProductionPanel() {
   const job = g.jobs[0];
   return (
     <>
+      <WorkshopPanel station="production" />
       <div className="feature-card">
         <div className="eyebrow">YOUR FIRST PRODUCTION LINE</div>
         <h2>
@@ -212,6 +215,7 @@ export function OrdersPanel() {
   const active = g.orders.filter((o) => o.status !== "delivered");
   return (
     <>
+      {physical && g.workshop?.enabled && <WorkshopPanel station="orders" />}
       <div className="stats-pair">
         <div>
           <b>{active.length}</b>
@@ -244,16 +248,21 @@ export function OrdersPanel() {
                   ? `In transit · ${Math.max(0, o.arrives! - g.time)}s`
                   : o.status}
               </span>
-              {physical && o.status === "ordered" && (
-                <button
-                  className="secondary"
-                  onClick={() => dispatch({ type: "pack", id: o.id })}
-                >
-                  <Package size={14} />
-                  Pack order
-                </button>
-              )}
-              {physical && o.status === "packed" && (
+              {physical &&
+                (!g.workshop?.enabled ||
+                  (g.designs.find((d) => d.id === o.designId)?.kind &&
+                    g.designs.find((d) => d.id === o.designId)?.kind !==
+                      "shirt")) &&
+                o.status === "ordered" && (
+                  <button
+                    className="secondary"
+                    onClick={() => dispatch({ type: "pack", id: o.id })}
+                  >
+                    <Package size={14} />
+                    Pack order
+                  </button>
+                )}
+              {physical && !o.physical && o.status === "packed" && (
                 <button
                   className="primary"
                   onClick={() => dispatch({ type: "ship", id: o.id })}
@@ -737,7 +746,14 @@ function Empty({
 export function PanelContent({ panel }: { panel: string }) {
   switch (panel) {
     case "receiving":
-      return <ReceivingPanel />;
+      return (
+        <>
+          <WorkshopPanel station="receiving" />
+          <ReceivingPanel />
+        </>
+      );
+    case "shelf":
+      return <WorkshopPanel station="shelf" />;
     case "map":
       return <WorldMap />;
     case "wardrobe":

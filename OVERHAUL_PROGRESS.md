@@ -1,8 +1,10 @@
 # Company Tycoon — current overhaul status
 
-The latest increment is the computer-led interface and 25-product starter catalogue, documented in **DESKTOP_RELEASE.md**. Earlier home/save and multi-industry work is documented in **INDUSTRIES_RELEASE.md**. The full realism/world brief remains in progress.
+The latest increment adds the opt-in hands-on cotton tee and fulfilment workflow, documented in **HANDS_ON_RELEASE.md**. The computer interface and 25-product starter catalogue are documented in **DESKTOP_RELEASE.md**. Earlier home/save and multi-industry work is documented in **INDUSTRIES_RELEASE.md**. The full realism/world brief remains in progress.
 
 ## Current playable scope
+
+Hands-on clothing now supports supplier comparison, physical box carrying/unpacking, blank handling, transfer placement and press operation, inspection, reserved customer-product handling, packaging/labels/inserts and physical courier collection. Held items and workstation stages are saved. First-person and third-person carrying, optional sound effects and a learned streamlined workflow are included. Other industries retain their existing specialised processes.
 
 The permanent business dock has been replaced by a physical computer and SummitOS app windows. Supplies and contracted batches now travel through tracked deliveries and physical receipt. Catalogue browsing, favourites/comparison, collections, premium finishing, a configurable online storefront and ledger cash-flow chart are working.
 
@@ -37,4 +39,8 @@ Scene-wide labels and duplicate objectives no longer leak into menus. Business t
 
 ## Validation status
 
-The production TypeScript/Vite build and 58 Vitest checks pass. The broad production Chromium run passed 23 of 25 scenarios. The wardrobe route and company-activation timing checks were corrected; all four targeted save/wardrobe/company/garage reruns passed. All 25 distinct scenarios have therefore passed across the broad run and targeted reruns. The final desktop/window/draft-preservation scenario also passed on the release build. Gameplay tests use Low under the software renderer, with a separate High-quality authored-asset render test. No hardware FPS claim is made. The main JS bundle remains approximately 1.35 MB / 384 KB gzip and Vite still reports its large-chunk advisory.
+The latest production TypeScript/Vite build and all 62 Vitest checks pass. The complete production Chromium suite passed all 26 scenarios. A final targeted run also passed both first-person mouse/trackpad checks and the expanded manufacturing scenario, including first-person box carrying, reload while carrying, printing, inspection, packaging, dispatch and payment after reload. The first-person carrying screenshot was visually inspected.
+
+Gameplay tests use Low under the software renderer, with a separate High-quality authored-asset render test. Physical MacBook/Windows hardware and Safari have not been tested. No hardware FPS claim is made. The main JS bundle is approximately 1.37 MB / 391 KB gzip; Vite's existing large-chunk advisory remains.
+
+The hands-on loop validates save ownership at every transition, including picked boxes, staged press work and reserved parcels. Tests reject duplicate/early receipts, duplicate collection/shipping, wrong-order placement and corrupted ownership. Supplier grade, minimum order, timing, actual costs and tutorial-grant accounting are covered. See HANDS_ON_RELEASE.md for the route and remaining stages.

@@ -1,3 +1,5 @@
+import { workshopSound } from "./workshopSound";
+import { handHint } from "./workshop";
 import {
   DEFAULT_CONTROLS,
   normalizeControls,
@@ -9,6 +11,7 @@ import { act, tick, type Action, type Game } from "./simulation";
 import { saveGame } from "./save";
 type Settings = ControlSettings &
   Graphics & {
+    workshopSounds: boolean;
     sensitivity: number;
     volume: number;
     firstPerson: boolean;
@@ -52,6 +55,7 @@ export const useGame = create<Store>((set, get) => ({
   settings: {
     ...DEFAULT_CONTROLS,
     ...GRAPHICS.high,
+    workshopSounds: false,
     sensitivity: 1,
     volume: 0.15,
     firstPerson: false,
@@ -76,6 +80,11 @@ export const useGame = create<Store>((set, get) => ({
       (expected && expected !== s.interaction)
     )
       return;
+    const physical = s.game && handHint(s.game, s.interaction);
+    if (physical) {
+      s.dispatch(physical.action);
+      return;
+    }
     if (s.interaction === "door" || s.interaction === "lights")
       s.dispatch({ type: s.interaction });
     else s.open(s.interaction);
@@ -131,6 +140,8 @@ export const useGame = create<Store>((set, get) => ({
       const g = get().game;
       if (!g) return false;
       const next = act(g, a);
+      if (a.type === "hand" && get().settings.workshopSounds)
+        workshopSound(a.command, get().settings.volume);
       set({
         game: next,
         notice: "",

@@ -1,3 +1,8 @@
+import {
+  CarriedObject,
+  WorkshopObjects,
+  FirstPersonCarry,
+} from "./WorkshopObjects";
 import { ComputerHardware } from "./ComputerHardware";
 import { PointerRecovery } from "./PointerRecovery";
 import { LoadedChair } from "./LoadedChair";
@@ -89,7 +94,8 @@ function Press() {
   const moving = useRef<THREE.Group>(null);
   const busy = useGame(
     (s) =>
-      !!s.game?.jobs.some((j) => !j.kind || j.kind === "print") &&
+      (!!s.game?.jobs.some((j) => !j.kind || j.kind === "print") ||
+        s.game?.workshop?.press?.stage === "pressing") &&
       s.game.property !== "garage",
   );
   const invalidate = useThree((s) => s.invalidate);
@@ -97,13 +103,25 @@ function Press() {
     (s) =>
       s.paused || !s.playing || ["settings", "saves"].includes(s.panel || ""),
   );
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     if (paused) return;
-    if (busy) invalidate();
-    if (moving.current)
-      moving.current.rotation.x = busy
-        ? Math.sin(clock.elapsedTime * 2) * 0.13
-        : 0.5;
+    if (busy && useGame.getState().game?.workshop?.press?.stage !== "pressing")
+      invalidate();
+    if (moving.current) {
+      const target =
+        useGame.getState().game?.workshop?.press?.stage === "pressing"
+          ? 0
+          : busy
+            ? Math.sin(clock.elapsedTime * 2) * 0.13
+            : 0.5;
+      moving.current.rotation.x = THREE.MathUtils.damp(
+        moving.current.rotation.x,
+        target,
+        12,
+        Math.min(delta, 0.1),
+      );
+      if (Math.abs(moving.current.rotation.x - target) > 0.002) invalidate();
+    }
   });
   return (
     <group position={[3.3, 1.08, -2.6]}>
@@ -206,6 +224,7 @@ function Founder() {
       window.removeEventListener("blur", up);
     };
   }, [gl, settings.firstPerson]);
+  const carrying = useGame((s) => !!s.game?.workshop?.carry);
   const outfit = useGame((s) =>
     s.game!.designs.find((d) => d.id === s.game!.equipped),
   );
@@ -375,7 +394,7 @@ function Founder() {
     if (sameWorld && settings.firstPerson && !st.panel) {
       camera.position.lerp(
         position.current.clone().add(new THREE.Vector3(0, 1.55, 0.1)),
-        0.2,
+        1 - Math.exp(-12 * Math.min(delta, 0.1)),
       );
       const eye = position.current.clone().add(new THREE.Vector3(0, 1.55, 0.1));
       const target = eye
@@ -387,6 +406,7 @@ function Founder() {
             -Math.cos(look.current.yaw) * Math.cos(look.current.pitch),
           ),
         );
+      if (camera.position.distanceTo(eye) > 0.002) invalidate();
       const matrix = new THREE.Matrix4().lookAt(
         camera.position,
         target,
@@ -412,6 +432,7 @@ function Founder() {
   });
   return (
     <group ref={ref}>
+      <CarriedObject />
       <group ref={legs}>
         {[-0.14, 0.14].map((x) => (
           <group key={x} position={[x, 0.65, 0]}>
@@ -441,7 +462,7 @@ function Founder() {
         <mesh
           key={x}
           position={[x * 0.31, 0.96, 0]}
-          rotation={[0, 0, x * 0.12]}
+          rotation={[carrying ? -1 : 0, 0, x * 0.12]}
           castShadow
         >
           <capsuleGeometry args={[0.09, 0.4, 4, 8]} />
@@ -711,7 +732,7 @@ function Room() {
         </group>
       )}
       {(game.deliveries || [])
-        .filter((d) => d.arrives <= game.time)
+        .filter((d) => d.arrives <= game.time && !d.picked)
         .slice(0, 4)
         .map((d, i) => (
           <group
@@ -721,12 +742,29 @@ function Room() {
               0.22,
               10.8 + Math.floor(i / 2) * 0.45,
             ]}
-            onClick={() => useGame.getState().interact("receiving")}
+            onClick={(e) => {
+              e.stopPropagation();
+              const state = useGame.getState();
+              if (
+                state.playing &&
+                !state.panel &&
+                state.interaction === "receiving"
+              ) {
+                if (state.game?.workshop?.enabled)
+                  state.dispatch({
+                    type: "hand",
+                    command: "pickup-delivery",
+                    id: d.id,
+                  });
+                else state.interact("receiving");
+              }
+            }}
           >
             <Box p={[0, 0, 0]} s={[0.4, 0.4, 0.4]} c="#a3815b" />
             <Box p={[0, 0.205, 0]} s={[0.06, 0.01, 0.4]} c="#d4b68c" />
           </group>
         ))}
+      <WorkshopObjects />
       <Neighbourhood />
       <Garage />
       {game.waypoint && (
@@ -756,6 +794,7 @@ function Room() {
           useGame.getState().worldEpoch
         }
       />
+      <FirstPersonCarry />
       {useGame.getState().settings.effects && (
         <ContactShadows
           position={[0, 0.02, 0]}

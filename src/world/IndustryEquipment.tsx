@@ -36,9 +36,27 @@ export function IndustryEquipment({ garage = false }: { garage?: boolean }) {
   const arm = useRef<THREE.Group>(null);
   const roller = useRef<THREE.Mesh>(null);
   const job = (g.property === "garage") === garage ? g.jobs[0] : undefined;
-  const d = g.designs.find((d) => d.id === job?.designId) || g.designs[0];
-  useFrame(({ clock }) => {
+  const physicalPress =
+    (g.property === "garage") === garage && g.workshop?.enabled
+      ? g.workshop.press
+      : undefined;
+  const pressing = physicalPress?.stage === "pressing";
+  const d =
+    g.designs.find(
+      (d) => d.id === (job?.designId || physicalPress?.designId),
+    ) || g.designs[0];
+  useFrame(({ clock }, delta) => {
     if (paused) return;
+    if (arm.current && industry === "streetwear") {
+      const target = pressing ? -0.5 : 0;
+      arm.current.position.y = THREE.MathUtils.damp(
+        arm.current.position.y,
+        target,
+        12,
+        Math.min(delta, 0.1),
+      );
+      if (Math.abs(arm.current.position.y - target) > 0.002) invalidate();
+    }
     if (
       job &&
       (industry === "streetwear"
@@ -120,8 +138,8 @@ export function IndustryEquipment({ garage = false }: { garage?: boolean }) {
       <mesh position={[0.45, 0.15, 0.33]}>
         <sphereGeometry args={[0.025, 8, 8]} />
         <meshStandardMaterial
-          color={job ? "#badc78" : "#889685"}
-          emissive={job ? "#9abf53" : "#000000"}
+          color={job || pressing ? "#badc78" : "#889685"}
+          emissive={job || pressing ? "#9abf53" : "#000000"}
           emissiveIntensity={0.7}
         />
       </mesh>

@@ -1,3 +1,4 @@
+import { validateWorkshop } from "./workshop";
 import { industryOf, INDUSTRIES, TUTORIAL_TASKS } from "./industries";
 import { openDB } from "idb";
 import type { Game } from "./simulation";
@@ -103,6 +104,14 @@ export function validateSave(value: unknown): Game {
   if (
     g.designs.some(
       (d) =>
+        (d.printPlacement !== undefined &&
+          (!Number.isFinite(d.printPlacement) ||
+            d.printPlacement < 0 ||
+            d.printPlacement > 1)) ||
+        (d.printQuality !== undefined &&
+          (!Number.isInteger(d.printQuality) ||
+            d.printQuality < 1 ||
+            d.printQuality > 5)) ||
         (d.collection !== undefined && !string(d.collection, 32)) ||
         (d.season !== undefined &&
           !["All year", "Spring", "Summer", "Autumn", "Winter"].includes(
@@ -128,6 +137,14 @@ export function validateSave(value: unknown): Game {
     )
   )
     throw new Error("Invalid design data.");
+  if (
+    g.blankQuality !== undefined &&
+    (!Number.isInteger(g.blankQuality) ||
+      g.blankQuality < 1 ||
+      g.blankQuality > 5)
+  )
+    throw new Error("Invalid material quality.");
+  validateWorkshop(g);
   const designIds = new Set(g.designs.map((d) => d.id));
   if (
     g.deliveries !== undefined &&
@@ -135,6 +152,9 @@ export function validateSave(value: unknown): Game {
       new Set(g.deliveries.map((d) => d.id)).size !== g.deliveries.length ||
       g.deliveries.some(
         (d) =>
+          (d.picked !== undefined && typeof d.picked !== "boolean") ||
+          (d.quality !== undefined &&
+            (!Number.isInteger(d.quality) || d.quality < 1 || d.quality > 5)) ||
           !string(d.id) ||
           !["blanks", "packaging", "labels", "batch"].includes(d.item) ||
           !Number.isSafeInteger(d.quantity) ||
@@ -164,6 +184,9 @@ export function validateSave(value: unknown): Game {
     new Set(g.orders.map((o) => o.id)).size !== g.orders.length ||
     g.orders.some(
       (o) =>
+        (o.brandedInsert !== undefined &&
+          typeof o.brandedInsert !== "boolean") ||
+        (o.physical !== undefined && typeof o.physical !== "boolean") ||
         !string(o.id) ||
         !string(o.customer) ||
         !designIds.has(o.designId) ||

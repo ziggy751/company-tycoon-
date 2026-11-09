@@ -1,3 +1,4 @@
+import { SUPPLIERS } from "../game/workshop";
 import { useState } from "react";
 import { useGame } from "../game/store";
 import {
@@ -16,8 +17,21 @@ export function SupplierApp() {
   const g = useGame((s) => s.game)!,
     dispatch = useGame((s) => s.dispatch),
     industry = industryOf(g);
+  const [supplier, setSupplier] = useState("standard");
+  const selected = SUPPLIERS.find((s) => s.id === supplier)!;
   return (
     <>
+      <label>
+        Supplier
+        <select value={supplier} onChange={(e) => setSupplier(e.target.value)}>
+          {SUPPLIERS.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name} · quality {s.quality}/5 · {s.seconds}s · minimum{" "}
+              {s.minimum} · {Math.round(s.factor * 100)}% base price
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="app-intro">
         <small>SUPPLIER MARKET</small>
         <h2>Good products start here.</h2>
@@ -64,11 +78,20 @@ export function SupplierApp() {
             <strong>{p.name}</strong>
             <span>{p.count} on hand</span>
           </div>
-          <p>{money(p.cost)} per unit · arrival in 18 seconds</p>
+          <p>
+            {money(Math.round(p.cost * selected.factor))} per unit · arrival in{" "}
+            {selected.seconds} seconds
+          </p>
           <button
             className="secondary"
+            disabled={selected.minimum > 1}
             onClick={() =>
-              dispatch({ type: "order-supplies", item: p.item, quantity: 1 })
+              dispatch({
+                type: "order-supplies",
+                supplier,
+                item: p.item,
+                quantity: 1,
+              })
             }
           >
             Order 1
@@ -76,10 +99,15 @@ export function SupplierApp() {
           <button
             className="primary"
             onClick={() =>
-              dispatch({ type: "order-supplies", item: p.item, quantity: 5 })
+              dispatch({
+                type: "order-supplies",
+                supplier,
+                item: p.item,
+                quantity: 5,
+              })
             }
           >
-            Order 5 · {money(p.cost * 5)}
+            Order 5 · {money(Math.round(p.cost * 5 * selected.factor))}
           </button>
         </article>
       ))}
@@ -136,7 +164,7 @@ function Deliveries({ receiving }: { receiving: boolean }) {
               ? `In transit · ${d.arrives - g.time}s`
               : "Delivered · waiting to be unpacked"}
           </p>
-          {receiving && (
+          {receiving && !g.workshop?.enabled && (
             <button
               className="primary"
               disabled={d.arrives > g.time}

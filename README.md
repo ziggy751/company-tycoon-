@@ -72,3 +72,7 @@ The physical computer opens draggable, minimisable business apps. Drafts survive
 The catalogue contains 8 streetwear types, 9 MTB accessories and 8 hair accessories, with product-specific costs/times, shaped previews, collection/season metadata, premium finishing, favourites and comparison. Tees use the press; other apparel uses specialist textile production plus inspection. Only the original tee family is currently wearable; the broader character clothing system is unfinished.
 
 Email login/D1 remains separate unfinished work on `feature/email-cloud-saves`. Main uses the existing independent local saves and preserves the original database and export/import format.
+
+## Hands-on clothing
+
+At a clothing manufacturing bench, choose **Start hands-on clothing**. Use nearby E/tap prompts to carry and unpack deliveries, handle the shirt and press, inspect finished stock, package reserved customer products and carry parcels to collection. Use **Station options** for design/press settings and optional sound effects. Existing companies and recipes remain available; after learning the workflow, repeat printing and a safe return to the streamlined loop are supported. See HANDS_ON_RELEASE.md for the complete route, save rules and remaining stages.

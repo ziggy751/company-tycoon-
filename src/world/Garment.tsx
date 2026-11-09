@@ -5,10 +5,15 @@ export function Garment({
   design,
   scale = 1,
   longSleeves = false,
+  placement = design.printPlacement ?? 0.5,
 }: {
-  design: Pick<Design, "color" | "ink" | "text" | "fit" | "graphic">;
+  design: Pick<
+    Design,
+    "color" | "ink" | "text" | "fit" | "graphic" | "printPlacement"
+  >;
   scale?: number;
   longSleeves?: boolean;
+  placement?: number;
 }) {
   const geometry = useMemo(() => {
     const s = new THREE.Shape();
@@ -36,6 +41,15 @@ export function Garment({
       bevelSize: 0.035,
       bevelThickness: 0.025,
     });
+    const positions = g.getAttribute("position");
+    for (let i = 0; i < positions.count; i++)
+      positions.setZ(
+        i,
+        positions.getZ(i) +
+          0.004 *
+            Math.sin(positions.getX(i) * 15) *
+            Math.cos(positions.getY(i) * 9),
+      );
     g.computeVertexNormals();
     return g;
   }, [design.fit, longSleeves]);
@@ -83,7 +97,7 @@ export function Garment({
       <mesh geometry={geometry} castShadow receiveShadow>
         <meshStandardMaterial color={design.color} roughness={0.94} />
       </mesh>
-      <mesh position={[0, -0.04, 0.101]}>
+      <mesh position={[0, -0.04 + (placement - 0.5) * 0.5, 0.105]}>
         <planeGeometry args={[0.85, 0.85]} />
         <meshStandardMaterial
           map={texture}

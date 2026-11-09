@@ -1,4 +1,10 @@
 import {
+  handAction,
+  SUPPLIERS,
+  type Workshop,
+  type HandAction,
+} from "./workshop";
+import {
   industryOf,
   productOf,
   supplierUnitCost,
@@ -11,6 +17,8 @@ import {
 } from "./industries";
 import { ECONOMY as E, UPGRADES } from "./catalog";
 export type Design = {
+  printPlacement?: number;
+  printQuality?: number;
   id: string;
   kind?: ProductKind;
   rawStock?: number;
@@ -28,6 +36,8 @@ export type Design = {
   stock: number;
 };
 export type Order = {
+  brandedInsert?: boolean;
+  physical?: boolean;
   id: string;
   designId: string;
   customer: string;
@@ -43,6 +53,9 @@ export type Entry = {
   type: "expense" | "revenue" | "grant";
 };
 export type Delivery = {
+  picked?: boolean;
+  supplier?: string;
+  quality?: number;
   id: string;
   item: "blanks" | "packaging" | "labels" | "batch";
   quantity: number;
@@ -50,6 +63,8 @@ export type Delivery = {
   designId?: string;
 };
 export type Game = {
+  workshop?: Workshop;
+  blankQuality?: number;
   deliveries?: Delivery[];
   favourites?: ProductKind[];
   storeOpen?: boolean;
@@ -109,11 +124,13 @@ export type Game = {
   player: [number, number];
 };
 export type Action =
+  | HandAction
   | { type: "design"; design: Omit<Design, "id" | "stock"> }
   | { type: "price"; id: string; price: number }
   | { type: "buy"; item: "blanks" | "packaging" | "labels"; quantity: number }
   | {
       type: "order-supplies";
+      supplier?: string;
       item: "blanks" | "packaging" | "labels";
       quantity: number;
     }
@@ -170,6 +187,7 @@ export const occupied = (s: Game) =>
   (s.deliveries || [])
     .filter((d) => d.item === "blanks" || d.item === "batch")
     .reduce((n, d) => n + d.quantity, 0) +
+  (s.workshop?.press || s.workshop?.carry?.kind === "blank" ? 1 : 0) +
   s.blanks +
   s.designs.reduce((v, d) => v + d.stock + (d.rawStock || 0), 0) +
   s.jobs.reduce((n, j) => n + (j.quantity ?? 1), 0) +
@@ -263,6 +281,11 @@ function achievements(s: Game) {
 export function act(state: Game, action: Action): Game {
   const s = clone(state);
   switch (action.type) {
+    case "hand":
+      handAction(s, action);
+      if (action.command === "stock") task(s, "produce");
+      if (action.command === "seal") task(s, "pack");
+      break;
     case "store":
       check(
         ["midnight", "paper", "violet"].includes(action.theme),
@@ -291,6 +314,14 @@ export function act(state: Game, action: Action): Game {
     case "order-supplies": {
       // Run the same validation/payment as legacy collection, then reserve the
       // stock in transit. Old local saves and old actions remain compatible.
+      const supplier = SUPPLIERS.find(
+        (x) => x.id === (action.supplier || "standard"),
+      );
+      check(supplier, "Unknown supplier.");
+      check(
+        action.quantity >= supplier!.minimum,
+        `Minimum order ${supplier!.minimum} units.`,
+      );
       const purchased = act(s, {
         type: "buy",
         item: action.item,
@@ -304,20 +335,36 @@ export function act(state: Game, action: Action): Game {
           (s[action.item] || 0) + pending + action.quantity <= 100,
           "Supply shelf holds 100 units including deliveries.",
         );
+      const base =
+        action.quantity *
+        (action.item === "blanks" ? 1200 : action.item === "labels" ? 50 : 200);
+      const difference = Math.round(base * supplier!.factor) - base;
+      if (difference > 0)
+        spend(purchased, "Supplier grade adjustment", difference);
+      if (difference < 0) {
+        const e = purchased.ledger[s.ledger.length];
+        e.amount -= difference;
+        purchased.cash -= difference;
+      }
       purchased[action.item] = (purchased[action.item] || 0) - action.quantity;
       purchased.deliveries ??= [];
       purchased.deliveries.push({
         id: id(purchased),
         item: action.item,
         quantity: action.quantity,
-        arrives: s.time + 18,
+        arrives: s.time + supplier!.seconds,
+        supplier: supplier!.id,
+        quality: supplier!.quality,
       });
       return purchased;
     }
     case "receive": {
       const delivery = s.deliveries?.find((d) => d.id === action.id);
       check(
-        delivery && delivery.arrives <= s.time,
+        delivery &&
+          !delivery.picked &&
+          !s.workshop?.enabled &&
+          delivery.arrives <= s.time,
         "Delivery has not arrived.",
       );
       if (delivery!.item === "batch") {
@@ -553,6 +600,11 @@ export function act(state: Game, action: Action): Game {
     }
     case "produce": {
       check(
+        !s.workshop?.enabled ||
+          (s.workshop.learned && !s.workshop.carry && !s.workshop.press),
+        "Finish your first hands-on shirt, or clear the press and your hands.",
+      );
+      check(
         industryOf(s).id === "streetwear",
         "This company does not use a heat press.",
       );
@@ -618,6 +670,16 @@ export function act(state: Game, action: Action): Game {
     }
     case "pack": {
       const o = s.orders.find((o) => o.id === action.id);
+      check(
+        !s.workshop?.enabled ||
+          (s.designs.find((d) => d.id === o?.designId)?.kind &&
+            s.designs.find((d) => d.id === o?.designId)?.kind !== "shirt"),
+        "Collect the reserved product and use the packing table.",
+      );
+      check(
+        !o?.physical,
+        "Use the physical packing workflow for this reserved item.",
+      );
       check(o?.status === "ordered", "Order has already been packed.");
       check(s.packaging > 0, "Buy packaging from the supplier.");
       s.packaging--;
@@ -627,6 +689,7 @@ export function act(state: Game, action: Action): Game {
     }
     case "ship": {
       const o = s.orders.find((o) => o.id === action.id);
+      check(!o?.physical, "Carry this parcel to the collection area.");
       check(o?.status === "packed", "Pack this order before shipping.");
       spend(s, "Postage · " + o!.customer, E.shipping);
       o!.status = "shipping";
@@ -683,6 +746,11 @@ export function tick(state: Game, seconds = 1): Game {
   const s = clone(state);
   for (let i = 0; i < seconds; i++) {
     s.time++;
+    if (
+      s.workshop?.press?.stage === "pressing" &&
+      s.workshop.press.end! <= s.time
+    )
+      s.workshop.press.stage = "ready";
     for (const j of s.jobs.filter((j) => j.end <= s.time)) {
       const d = s.designs.find((d) => d.id === j.designId);
       if (d) {

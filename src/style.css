@@ -2406,3 +2406,30 @@ b {
     animation: none;
   }
 }
+.station-options {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 26;
+  color: white;
+  background: #202438e8;
+  border: 1px solid #ffffff30;
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-size: 11px;
+}
+.workshop-status {
+  position: absolute;
+  top: 100px;
+  right: 24px;
+  max-width: 300px;
+  background: #161b2eea;
+  color: #e8e0f5;
+  border: 1px solid #c6aaff30;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 11px;
+  z-index: 24;
+  pointer-events: none;
+}
